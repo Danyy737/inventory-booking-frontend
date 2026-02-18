@@ -6,7 +6,13 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
+  const [organisations, setOrganisations] = useState([]); // ✅ NEW
   const [loading, setLoading] = useState(true);
+
+  async function refreshOrganisations() {
+    const res = await api.get("/my/organisations");
+    setOrganisations(res.data?.data ?? []);
+  }
 
   async function refreshMe() {
     const res = await api.get("/me");
@@ -14,6 +20,9 @@ export function AuthProvider({ children }) {
 
     setUser(payload?.user ?? null);
     setRole(payload?.role ?? null);
+
+    // ✅ also load org memberships
+    await refreshOrganisations();
   }
 
   async function login(email, password) {
@@ -30,6 +39,7 @@ export function AuthProvider({ children }) {
     localStorage.removeItem("token");
     setUser(null);
     setRole(null);
+    setOrganisations([]); // ✅ reset
   }
 
   useEffect(() => {
@@ -44,6 +54,7 @@ export function AuthProvider({ children }) {
         localStorage.removeItem("token");
         setUser(null);
         setRole(null);
+        setOrganisations([]);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -53,10 +64,12 @@ export function AuthProvider({ children }) {
       value={{
         user,
         role,
+        organisations, // ✅ expose
         loading,
         login,
         logout,
         refreshMe,
+        refreshOrganisations,
       }}
     >
       {children}
