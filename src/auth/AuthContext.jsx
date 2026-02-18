@@ -8,20 +8,22 @@ export function AuthProvider({ children }) {
   const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  async function loadMe() {
+  async function refreshMe() {
     const res = await api.get("/me");
-    const payload = res.data?.data ?? res.data;
-    setUser(payload?.user ?? payload);
-    setRole(payload?.role ?? payload?.user?.role ?? null);
+    const payload = res.data;
+
+    setUser(payload?.user ?? null);
+    setRole(payload?.role ?? null);
   }
 
   async function login(email, password) {
-    const res = await api.post("/auth/login", { email, password })
+    const res = await api.post("/auth/login", { email, password });
+
     const token = res.data?.token;
     if (!token) throw new Error("No token returned from API");
 
     localStorage.setItem("token", token);
-    await loadMe();
+    await refreshMe();
   }
 
   function logout() {
@@ -37,7 +39,7 @@ export function AuthProvider({ children }) {
       return;
     }
 
-    loadMe()
+    refreshMe()
       .catch(() => {
         localStorage.removeItem("token");
         setUser(null);
@@ -47,7 +49,16 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, role, loading, login, logout }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        role,
+        loading,
+        login,
+        logout,
+        refreshMe,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

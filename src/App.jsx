@@ -2,6 +2,7 @@
 import { Routes, Route } from "react-router-dom";
 import RequireAuth from "./auth/RequireAuth";
 import AppLayout from "./layouts/AppLayout";
+import SelectOrganisation from "./pages/SelectOrganisation";
 
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -9,6 +10,7 @@ import Inventory from "./pages/Inventory";
 import Packages from "./pages/Packages";
 import Bookings from "./pages/Bookings";
 import Availability from "./pages/Availability";
+
 
 export default function App() {
   return (
@@ -23,6 +25,7 @@ export default function App() {
           <Route path="/packages" element={<Packages />} />
           <Route path="/bookings" element={<Bookings />} />
           <Route path="/availability" element={<Availability />} />
+          <Route path="/select-organisation" element={<SelectOrganisation />} />
         </Route>
       </Route>
     </Routes>
