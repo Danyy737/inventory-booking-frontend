@@ -39,7 +39,7 @@ export default function Onboarding() {
     try {
       await api.post("/organisations/join", { join_code: joinCode });
       await refreshMe();
-      navigate("/dashboard", { replace: true });
+      navigate("/", { replace: true });
     } catch (e) {
       setErr(e?.response?.data?.message || "Failed to join organisation.");
     } finally {
