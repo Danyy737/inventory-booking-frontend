@@ -14,6 +14,7 @@ import Onboarding from "./pages/Onboarding";
 import Register from "./pages/Register";
 
 
+
 export default function App() {
   return (
     <Routes>
@@ -34,6 +35,7 @@ export default function App() {
           <Route path="/bookings" element={<Bookings />} />
           <Route path="/availability" element={<Availability />} />
           <Route path="/select-organisation" element={<SelectOrganisation />} />
+          <Route path="/packages" element={<Packages />} />
         </Route>
       </Route>
     </Routes>
