@@ -27,7 +27,11 @@ export default function Login() {
       {err && <div style={{ color: "crimson" }}>{err}</div>}
 
       <form onSubmit={onSubmit} style={{ display: "grid", gap: 10, marginTop: 12 }}>
-        <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" />
+        <input
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="Email"
+        />
         <input
           value={password}
           onChange={(e) => setPassword(e.target.value)}
@@ -36,6 +40,23 @@ export default function Login() {
         />
         <button type="submit">Sign in</button>
       </form>
+
+      {/* Register button */}
+      <div style={{ marginTop: 16, textAlign: "center" }}>
+        <button
+          type="button"
+          onClick={() => nav("/register")}
+          style={{
+            background: "none",
+            border: "none",
+            color: "#2563eb",
+            cursor: "pointer",
+            padding: 0
+          }}
+        >
+          Don’t have an account? Create one
+        </button>
+      </div>
     </div>
   );
 }

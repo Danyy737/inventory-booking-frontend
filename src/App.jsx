@@ -11,12 +11,15 @@ import Bookings from "./pages/Bookings";
 import Availability from "./pages/Availability";
 import SelectOrganisation from "./pages/SelectOrganisation";
 import Onboarding from "./pages/Onboarding";
+import Register from "./pages/Register";
+
 
 export default function App() {
   return (
     <Routes>
       {/* Public route */}
       <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
 
       {/* Everything below requires login */}
       <Route element={<RequireAuth />}>
