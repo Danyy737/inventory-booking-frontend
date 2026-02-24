@@ -1,16 +1,137 @@
-# React + Vite
+# Inventory Booking SaaS – Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Frontend application for the Inventory Booking SaaS platform.
 
-Currently, two official plugins are available:
+This React application connects to the Laravel backend API and provides the user interface for managing inventory, packages, bookings, and availability checks.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+Backend Repository:
+https://github.com/Danyy737/inventory-booking-saas
 
-## React Compiler
+---
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Overview
 
-## Expanding the ESLint configuration
+This frontend provides:
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- Authentication (login / register)
+- Organisation selection
+- Inventory management UI
+- Package management UI
+- Booking creation and management
+- Standalone availability checker
+- Packing list viewing
+
+The application communicates with the backend API using Axios and is protected using Sanctum authentication tokens.
+
+---
+
+## Tech Stack
+
+- React
+- React Router
+- Axios
+- Context API (Auth Context)
+- Vite (or your current build tool)
+
+---
+
+## How It Connects to the Backend
+
+The frontend communicates with the Laravel backend via an Axios API client.
+
+The base URL is configured in:
+
+```
+src/api/client.js
+```
+
+Make sure your backend is running before starting the frontend.
+
+---
+
+## Installation
+
+Clone the repository:
+
+```
+git clone <your-frontend-repo-url>
+cd inventory-booking-frontend
+```
+
+Install dependencies:
+
+```
+npm install
+```
+
+Run the development server:
+
+```
+npm run dev
+```
+
+Ensure the backend server is running at the configured base URL.
+
+---
+
+## Core Pages
+
+- Dashboard
+- Inventory
+- Packages
+- Bookings
+- Availability
+- Booking Detail (Packing List)
+
+---
+
+## Project Structure
+
+```
+src/
+ ├── api/
+ │    └── client.js
+ ├── auth/
+ │    └── AuthContext.jsx
+ ├── pages/
+ │    ├── Availability.jsx
+ │    ├── Bookings.jsx
+ │    ├── BookingDetail.jsx
+ │    ├── Inventory.jsx
+ │    ├── Packages.jsx
+ │    └── Dashboard.jsx
+ └── App.jsx
+```
+
+---
+
+## Status
+
+MVP Complete.
+
+This frontend integrates with the backend to provide:
+
+- Multi-tenant organisation support
+- Real-time availability validation
+- Reservation-based conflict prevention
+- Package expansion logic
+- Packing list generation
+
+---
+
+## Future Improvements
+
+- Package addons UI
+- Booking lifecycle states
+- Calendar view
+- Dashboard reporting
+- UI design improvements
+- Production deployment configuration
+
+---
+
+## Author
+
+Daniel Mourad
+
+Frontend client for the Inventory Booking SaaS platform.
