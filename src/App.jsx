@@ -12,7 +12,8 @@ import Availability from "./pages/Availability";
 import SelectOrganisation from "./pages/SelectOrganisation";
 import Onboarding from "./pages/Onboarding";
 import Register from "./pages/Register";
-
+import BookingNew from "./pages/BookingNew";
+import BookingDetail from "./pages/BookingDetail";
 
 
 export default function App() {
@@ -36,6 +37,8 @@ export default function App() {
           <Route path="/availability" element={<Availability />} />
           <Route path="/select-organisation" element={<SelectOrganisation />} />
           <Route path="/packages" element={<Packages />} />
+<Route path="/bookings/new" element={<BookingNew />} />
+<Route path="/bookings/:id" element={<BookingDetail />} />
         </Route>
       </Route>
     </Routes>
