@@ -15,6 +15,13 @@ export default function BookingNew() {
   const [packages, setPackages] = useState([]);
   const [loadingPkgs, setLoadingPkgs] = useState(true);
 
+  // ✅ Addons
+  const [addons, setAddons] = useState([]);
+  const [loadingAddons, setLoadingAddons] = useState(true);
+  const [addonsErr, setAddonsErr] = useState("");
+  // selectedAddons: [{ addon_id: number, quantity: number }]
+  const [selectedAddons, setSelectedAddons] = useState([]);
+
   const [checking, setChecking] = useState(false);
   const [creating, setCreating] = useState(false);
   const [err, setErr] = useState("");
@@ -32,6 +39,24 @@ export default function BookingNew() {
         setPackages(Array.isArray(list) ? list : []);
       } finally {
         setLoadingPkgs(false);
+      }
+    })();
+  }, []);
+
+  // ✅ Load addons for this org
+  useEffect(() => {
+    (async () => {
+      setLoadingAddons(true);
+      setAddonsErr("");
+      try {
+        const res = await api.get("/addons");
+        const list = res.data?.data ?? res.data;
+        setAddons(Array.isArray(list) ? list : []);
+      } catch (e) {
+        setAddonsErr(e?.response?.data?.message ?? e?.message ?? "Failed to load addons");
+        setAddons([]);
+      } finally {
+        setLoadingAddons(false);
       }
     })();
   }, []);
@@ -59,7 +84,11 @@ export default function BookingNew() {
 
         const mapped = (Array.isArray(rawItems) ? rawItems : [])
           .map((pi) => ({
-            inventory_item_id: pi.inventory_item_id ?? pi.inventoryItemId ?? pi.item_id ?? pi.inventory_item?.id,
+            inventory_item_id:
+              pi.inventory_item_id ??
+              pi.inventoryItemId ??
+              pi.item_id ??
+              pi.inventory_item?.id,
             quantity: Number(pi.quantity ?? pi.qty ?? pi.required_quantity ?? 0),
           }))
           .filter((x) => Number.isFinite(x.inventory_item_id) && x.quantity > 0);
@@ -71,6 +100,11 @@ export default function BookingNew() {
     })();
   }, [packageId]);
 
+  // ✅ If addons change, invalidate preview (forces re-check)
+  useEffect(() => {
+    setPreview(null);
+  }, [selectedAddons]);
+
   const canCheck = useMemo(() => {
     return Boolean(startLocal && endLocal && packageId && items.length > 0);
   }, [startLocal, endLocal, packageId, items.length]);
@@ -79,6 +113,31 @@ export default function BookingNew() {
     // datetime-local interpreted in local timezone → convert to UTC ISO
     const d = new Date(local);
     return d.toISOString();
+  }
+
+  function toggleAddon(addonId, checked) {
+    setErr("");
+    setPreview(null);
+    setSelectedAddons((prev) => {
+      if (checked) {
+        if (prev.some((a) => a.addon_id === addonId)) return prev;
+        return [...prev, { addon_id: addonId, quantity: 1 }];
+      }
+      return prev.filter((a) => a.addon_id !== addonId);
+    });
+  }
+
+  function setAddonQty(addonId, qtyRaw) {
+    const qty = Number(qtyRaw);
+    setErr("");
+    setPreview(null);
+    setSelectedAddons((prev) =>
+      prev.map((a) =>
+        a.addon_id === addonId
+          ? { ...a, quantity: Number.isFinite(qty) && qty >= 1 ? qty : 1 }
+          : a
+      )
+    );
   }
 
   async function onCheck() {
@@ -95,18 +154,27 @@ export default function BookingNew() {
       return;
     }
 
+    // ✅ Frontend-side guard (backend also validates)
+    const invalidAddon = selectedAddons.find((a) => !a.addon_id || !Number.isFinite(a.quantity) || a.quantity < 1);
+    if (invalidAddon) {
+      setErr("Addon quantities must be 1 or more.");
+      return;
+    }
+
     setChecking(true);
     try {
       const payload = {
         start_at: toISO(startLocal),
         end_at: toISO(endLocal),
 
-        // Backend appears to care about requirements/items, not package_id.
-        // We can still include package_id for bookkeeping if your backend ignores it.
+        // You can keep this; backend may ignore it
         package_id: Number(packageId),
 
-        // ✅ This is what your backend needs
+        // ✅ Package requirements
         items,
+
+        // ✅ Addons for availability + booking creation
+        addons: selectedAddons,
       };
 
       const res = await previewBookingAvailability(payload);
@@ -133,6 +201,7 @@ export default function BookingNew() {
         end_at: toISO(endLocal),
         package_id: Number(packageId),
         items,
+        addons: selectedAddons,
       };
 
       const created = await createBooking(payload);
@@ -144,7 +213,9 @@ export default function BookingNew() {
 
       nav(newId ? `/bookings/${newId}` : "/bookings");
     } catch (e) {
-      setErr(e?.response?.data?.message ?? e?.message ?? "Create booking failed");
+      // If backend returns 409 shortages, show a clean message
+      const msg = e?.response?.data?.message ?? e?.message ?? "Create booking failed";
+      setErr(msg);
     } finally {
       setCreating(false);
     }
@@ -201,6 +272,70 @@ export default function BookingNew() {
         Loaded package requirements: <strong>{items.length}</strong> item(s)
       </div>
 
+      {/* ✅ Addons section */}
+      <div style={{ marginTop: 14, border: "1px solid #ddd", padding: 12, borderRadius: 8 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+          <h3 style={{ margin: 0 }}>Addons</h3>
+          <button type="button" onClick={() => { fetchAddons?.(); }} disabled={loadingAddons} style={{ display: "none" }}>
+            Refresh
+          </button>
+        </div>
+
+        {addonsErr && <div style={{ color: "crimson", marginTop: 8 }}>{addonsErr}</div>}
+
+        {loadingAddons ? (
+          <div style={{ marginTop: 8 }}>Loading addons…</div>
+        ) : addons.length === 0 ? (
+          <div style={{ marginTop: 8, color: "#666" }}>No addons available.</div>
+        ) : (
+          <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+            {addons.map((a) => {
+              const selected = selectedAddons.find((x) => x.addon_id === a.id);
+              return (
+                <div
+                  key={a.id}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "28px 1fr 120px",
+                    gap: 10,
+                    alignItems: "center",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={!!selected}
+                    onChange={(e) => toggleAddon(a.id, e.target.checked)}
+                  />
+
+                  <div>
+                    <div style={{ fontWeight: 600 }}>
+                      {a.name}{" "}
+                      <span style={{ fontWeight: 400, color: "#666" }}>
+                        ({a.pricing_type} • ${(Number(a.price_cents || 0) / 100).toFixed(2)})
+                      </span>
+                    </div>
+                    {a.description && <div style={{ color: "#666", fontSize: 13 }}>{a.description}</div>}
+                  </div>
+
+                  <input
+                    type="number"
+                    min={1}
+                    disabled={!selected}
+                    value={selected ? selected.quantity : 1}
+                    onChange={(e) => setAddonQty(a.id, e.target.value)}
+                    style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #ddd" }}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div style={{ marginTop: 10, color: "#666", fontSize: 13 }}>
+          Selected addons: <strong>{selectedAddons.length}</strong>
+        </div>
+      </div>
+
       <div style={{ marginTop: 14, display: "flex", gap: 10 }}>
         <button onClick={onCheck} disabled={!canCheck || checking}>
           {checking ? "Checking…" : "Check availability"}
@@ -222,4 +357,10 @@ export default function BookingNew() {
   );
 }
 
-const input = { width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #ddd", marginTop: 6 };
+const input = {
+  width: "100%",
+  padding: "10px 12px",
+  borderRadius: 8,
+  border: "1px solid #ddd",
+  marginTop: 6,
+};

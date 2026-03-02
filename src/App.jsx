@@ -14,7 +14,8 @@ import Onboarding from "./pages/Onboarding";
 import Register from "./pages/Register";
 import BookingNew from "./pages/BookingNew";
 import BookingDetail from "./pages/BookingDetail";
-
+import Addons from "./pages/Addons";
+import AddonForm from "./pages/AddonForm";
 
 export default function App() {
   return (
@@ -39,6 +40,9 @@ export default function App() {
           <Route path="/packages" element={<Packages />} />
 <Route path="/bookings/new" element={<BookingNew />} />
 <Route path="/bookings/:id" element={<BookingDetail />} />
+<Route path="/addons" element={<Addons />} />
+<Route path="/addons/new" element={<AddonForm mode="create" />} />
+<Route path="/addons/:id/edit" element={<AddonForm mode="edit" />} />
         </Route>
       </Route>
     </Routes>

@@ -27,7 +27,6 @@ export default function Inventory() {
     setLoading(true);
     try {
       const res = await api.get("/inventory/items");
-      // Support either { data: [...] } or [...]
       const payload = res?.data?.data ?? res?.data ?? [];
       setItems(Array.isArray(payload) ? payload : []);
     } catch (e) {
@@ -53,7 +52,6 @@ export default function Inventory() {
       });
 
       const created = res?.data?.data ?? res?.data;
-      // Optimistic add if we got an item back; otherwise refetch
       if (created && created.id) {
         setItems((prev) => [created, ...prev]);
       } else {
@@ -74,7 +72,7 @@ export default function Inventory() {
     setEditingId(item.id);
     setEditName(item.name ?? "");
     setEditSku(item.sku ?? "");
-    setEditQuantity(Number(item.quantity ?? 0));
+    setEditQuantity(Number(item?.stock?.total_quantity ?? 0)); // ✅ FIX
   }
 
   function cancelEdit() {
@@ -88,20 +86,36 @@ export default function Inventory() {
     setErr("");
     setSaving(true);
     try {
-      await api.patch(`/inventory/items/${id}`, {
+      const res = await api.patch(`/inventory/items/${id}`, {
         name: editName,
         sku: editSku || null,
         total_quantity: Number(editQuantity),
       });
 
-      // Update local list
-      setItems((prev) =>
-        prev.map((it) =>
-          it.id === id
-            ? { ...it, name: editName, sku: editSku || null, quantity: Number(editQuantity) }
-            : it
-        )
-      );
+      // ✅ Use backend response as source of truth
+      const updated = res?.data?.data ?? res?.data;
+
+      if (updated && updated.id) {
+        setItems((prev) => prev.map((it) => (it.id === id ? updated : it)));
+      } else {
+        // fallback if response is unexpected
+        setItems((prev) =>
+          prev.map((it) =>
+            it.id === id
+              ? {
+                  ...it,
+                  name: editName,
+                  sku: editSku || null,
+                  stock: {
+                    ...(it.stock ?? {}),
+                    total_quantity: Number(editQuantity),
+                  },
+                }
+              : it
+          )
+        );
+      }
+
       cancelEdit();
     } catch (e) {
       setErr(e?.response?.data?.message || "Failed to update item.");

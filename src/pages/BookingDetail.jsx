@@ -186,9 +186,17 @@ function ReservedItems({ booking }) {
 }
 
 function fmt(iso) {
-  if (!iso) return "";
+  if (!iso) return "—";
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? String(iso) : d.toLocaleString();
+  if (Number.isNaN(d.getTime())) return String(iso);
+
+  return d.toLocaleString("en-AU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 /**

@@ -10,6 +10,7 @@ export default function Nav() {
         <Link to="/packages">Packages</Link>
         <Link to="/bookings">Bookings</Link>
         <Link to="/availability">Availability</Link>
+        <Link to="/addons">Addons</Link>
       </nav>
     </div>
   );
