@@ -17,9 +17,10 @@ This frontend provides:
 - Organisation selection
 - Inventory management UI
 - Package management UI
-- Booking creation and management
-- Standalone availability checker
-- Packing list viewing
+- Addons management UI (inventory-backed upsells)
+- Booking creation and management (packages + addons)
+- Availability preview and validation (prevents oversells)
+- Packing list viewing (package + addon totals)
 
 The application communicates with the backend API using Axios and is protected using Sanctum authentication tokens.
 
@@ -81,7 +82,30 @@ Ensure the backend server is running at the configured base URL.
 - Packages
 - Bookings
 - Availability
+- Addons
 - Booking Detail (Packing List)
+
+---
+
+## Addons + Bookings Integration
+
+Addons are optional extras that can be added to a booking (e.g. “Extra Chairs”, “Extra Table”).
+Each addon is backed by inventory items and consumes stock during the booking window.
+
+### Booking flow
+1. Select **Start** and **End**
+2. Select a **Package**
+3. Select **Addons** and set quantity for each addon
+4. Click **Check availability**
+   - Shows required vs available inventory (includes addon consumption)
+5. Click **Confirm booking**
+   - Creates booking + reservations, then redirects to booking detail
+
+### How addon quantity works
+If an addon contains inventory items with `quantity_per_unit`:
+- Selecting `Extra Chairs x 2` where `quantity_per_unit = 5` reserves **10 chairs**.
+
+> Note: inactive addons are hidden from the booking addon selector and the default addons list.
 
 ---
 
@@ -112,16 +136,16 @@ MVP Complete.
 This frontend integrates with the backend to provide:
 
 - Multi-tenant organisation support
-- Real-time availability validation
+- Real-time availability validation (packages + addons)
 - Reservation-based conflict prevention
 - Package expansion logic
-- Packing list generation
+- Addon selection with quantity multiplier support
+- Packing list generation (includes addons)
 
 ---
 
 ## Future Improvements
 
-- Package addons UI
 - Booking lifecycle states
 - Calendar view
 - Dashboard reporting
