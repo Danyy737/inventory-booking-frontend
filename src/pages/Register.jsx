@@ -1,7 +1,13 @@
 import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
-import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
+
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 export default function Register() {
   const { refreshMe } = useAuth();
@@ -17,105 +23,147 @@ export default function Register() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setErr("");
-    setLoading(true);
+    if (loading) return;
 
+    setErr("");
+
+    if (password !== passwordConfirmation) {
+      const msg = "Passwords do not match.";
+      setErr(msg);
+      toast.error(msg);
+      return;
+    }
+
+    setLoading(true);
     try {
       const res = await api.post("/auth/register", {
-        name,
-        email,
+        name: name.trim(),
+        email: email.trim(),
         password,
         password_confirmation: passwordConfirmation,
       });
 
       const token = res?.data?.token;
-      if (!token) {
-        throw new Error("No token returned from register.");
-      }
+      if (!token) throw new Error("No token returned from register.");
 
       localStorage.setItem("token", token);
 
-      // Pull /me + /my/organisations so RequireAuth routes correctly
       await refreshMe();
 
-      // Let your existing route guard decide where they go next
+      toast.success("Account created");
       navigate("/", { replace: true });
     } catch (e) {
-      setErr(
+      const msg =
         e?.response?.data?.message ||
-          (e?.response?.data?.errors
-            ? Object.values(e.response.data.errors).flat().join(" ")
-            : null) ||
-          e?.message ||
-          "Registration failed."
-      );
+        (e?.response?.data?.errors
+          ? Object.values(e.response.data.errors).flat().join(" ")
+          : null) ||
+        e?.message ||
+        "Registration failed.";
+
+      setErr(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div style={{ padding: 20, maxWidth: 520 }}>
-      <h2>Create account</h2>
-      <p style={{ marginTop: 6 }}>
-        Register to create or join an organisation.
-      </p>
-
-      {err && <div style={{ color: "crimson", marginTop: 10 }}>{err}</div>}
-
-      <form
-        onSubmit={handleSubmit}
-        style={{ border: "1px solid #ddd", padding: 16, marginTop: 16 }}
-      >
-        <div style={{ display: "grid", gap: 10 }}>
-          <input
-            placeholder="Full name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            autoComplete="name"
-          />
-
-          <input
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            autoComplete="email"
-          />
-
-          <input
-            placeholder="Password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            autoComplete="new-password"
-          />
-
-          <input
-            placeholder="Confirm password"
-            type="password"
-            value={passwordConfirmation}
-            onChange={(e) => setPasswordConfirmation(e.target.value)}
-            required
-            autoComplete="new-password"
-          />
-
-          <button disabled={loading}>
-            {loading ? "Creating..." : "Create account"}
-          </button>
+    <div className="min-h-[calc(100vh-56px)] flex items-center justify-center p-4">
+      <div className="w-full max-w-md space-y-4">
+        {/* Brand */}
+        <div className="flex items-center justify-center gap-3">
+          <div className="h-10 w-10 rounded-xl border bg-muted flex items-center justify-center font-semibold">
+            IB
+          </div>
+          <div className="leading-tight">
+            <div className="font-semibold">Inventory Booking</div>
+            <div className="text-xs text-muted-foreground">Create your account</div>
+          </div>
         </div>
-      </form>
 
-      <div style={{ marginTop: 12 }}>
-        <button
-          type="button"
-          onClick={() => navigate("/login")}
-          style={{ border: "none", background: "transparent", color: "#2563eb", padding: 0, cursor: "pointer" }}
-        >
-          Already have an account? Login
-        </button>
+        <Card>
+          <CardHeader>
+            <CardTitle>Create account</CardTitle>
+            <CardDescription>Register to create or join an organisation.</CardDescription>
+          </CardHeader>
+
+          <CardContent className="space-y-4">
+            {err ? (
+              <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                {err}
+              </div>
+            ) : null}
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Full name</Label>
+                <Input
+                  id="name"
+                  placeholder="Username"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  autoComplete="name"
+                  required
+                  disabled={loading}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
+                  required
+                  disabled={loading}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="Create a password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="new-password"
+                  required
+                  disabled={loading}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="passwordConfirmation">Confirm password</Label>
+                <Input
+                  id="passwordConfirmation"
+                  type="password"
+                  placeholder="Repeat password"
+                  value={passwordConfirmation}
+                  onChange={(e) => setPasswordConfirmation(e.target.value)}
+                  autoComplete="new-password"
+                  required
+                  disabled={loading}
+                />
+              </div>
+
+              <Button className="w-full" type="submit" disabled={loading}>
+                {loading ? "Creating…" : "Create account"}
+              </Button>
+            </form>
+
+            <div className="text-sm text-muted-foreground text-center">
+              Already have an account?{" "}
+              <Link to="/login" className="text-foreground underline underline-offset-4">
+                Login
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
