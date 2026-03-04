@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { api } from "../api/client";
 import { useNavigate } from "react-router-dom";
+import { api } from "../api/client";
+
+import PageHeader from "../components/PageHeader";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 /**
  * Availability Page (MVP)
@@ -68,13 +77,8 @@ export default function Availability() {
       setErr("");
       setLoadingOptions(true);
       try {
-        // These match your backend routes exactly (no /api prefix here)
-        const [invRes, pkgRes] = await Promise.all([
-          api.get("/inventory/items"),
-          api.get("/packages"),
-        ]);
+        const [invRes, pkgRes] = await Promise.all([api.get("/inventory/items"), api.get("/packages")]);
 
-        // Laravel often returns { data: [...] }
         const inv = invRes?.data?.data ?? invRes?.data ?? [];
         const pkgs = pkgRes?.data?.data ?? pkgRes?.data ?? [];
 
@@ -145,23 +149,16 @@ export default function Availability() {
   }, [payload]);
 
   function normalizePreviewResponse(raw) {
-    // Your BookingController@previewAvailability might return any structure.
-    // We'll normalize defensively.
-
-    // Common places:
     const data = raw?.data ?? raw;
 
-    // boolean flags that might exist:
-    const ok =
-      Boolean(
-        data?.ok ??
-          data?.available ??
-          data?.is_available ??
-          data?.availability?.ok ??
-          data?.availability?.available
-      );
+    const ok = Boolean(
+      data?.ok ??
+        data?.available ??
+        data?.is_available ??
+        data?.availability?.ok ??
+        data?.availability?.available
+    );
 
-    // requirements/breakdown might live in different keys:
     const requirements =
       data?.requirements ??
       data?.items ??
@@ -171,38 +168,17 @@ export default function Availability() {
       data?.shortages ??
       [];
 
-    // We want an array of rows with:
-    // { inventory_item_id, name, required, available, shortage }
-    // If your API already returns that, great. If not, this still displays something.
     const normalizedRows = Array.isArray(requirements)
       ? requirements.map((r) => ({
           inventory_item_id: r.inventory_item_id ?? r.id ?? null,
           name: r.name ?? r.inventory_item_name ?? r.item_name ?? null,
-          required:
-            r.required ??
-            r.required_quantity ??
-            r.qty_required ??
-            r.requested ??
-            r.quantity ??
-            0,
-          available:
-            r.available ??
-            r.available_quantity ??
-            r.qty_available ??
-            r.on_hand ??
-            r.remaining ??
-            0,
-          shortage:
-            r.shortage ??
-            r.shortage_quantity ??
-            r.qty_short ??
-            r.missing ??
-            0,
+          required: r.required ?? r.required_quantity ?? r.qty_required ?? r.requested ?? r.quantity ?? 0,
+          available: r.available ?? r.available_quantity ?? r.qty_available ?? r.on_hand ?? r.remaining ?? 0,
+          shortage: r.shortage ?? r.shortage_quantity ?? r.qty_short ?? r.missing ?? 0,
           _raw: r,
         }))
       : [];
 
-    // If API doesn't provide ok but provides shortages, infer:
     const inferredOk =
       (data?.ok ?? data?.available ?? data?.is_available) != null
         ? ok
@@ -221,14 +197,10 @@ export default function Availability() {
     setResult(null);
 
     try {
-      // This matches your route list:
-      // POST /bookings/preview-availability
       const res = await api.post("/bookings/preview-availability", payload);
-
       const normalized = normalizePreviewResponse(res?.data);
       setResult(normalized);
     } catch (e) {
-      // If backend uses 409 for shortages, still show breakdown if it exists
       const status = e?.response?.status;
       const data = e?.response?.data;
 
@@ -245,7 +217,6 @@ export default function Availability() {
   }
 
   function goToCreateBooking() {
-    // Adjust this route if your booking create page differs
     navigate("/bookings/new", {
       state: {
         start_at: payload.start_at,
@@ -258,195 +229,202 @@ export default function Availability() {
 
   const statusText = useMemo(() => {
     if (!result) return "";
-    return result.ok ? "✅ Available" : "❌ Not available (shortages found)";
+    return result.ok ? "Available" : "Not available (shortages found)";
   }, [result]);
 
   return (
-    <div style={{ maxWidth: 1000, margin: "0 auto", padding: 16 }}>
-      <h1 style={{ marginBottom: 8 }}>Availability</h1>
-      <p style={{ marginTop: 0, opacity: 0.85 }}>
-        Check if a set of items/packages can be booked for a time window — before creating a booking.
-      </p>
+    <div className="space-y-6">
+      <PageHeader
+        title="Availability"
+        description="Check if items/packages can be booked for a time window before creating a booking."
+        right={
+          <Button variant="outline" onClick={checkAvailability} disabled={!canCheck || checking}>
+            {checking ? "Checking…" : "Check availability"}
+          </Button>
+        }
+      />
 
       {err ? (
-        <div style={{ padding: 12, border: "1px solid #f99", borderRadius: 8, marginBottom: 12 }}>
-          <b>Error:</b> {err}
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+          {err}
         </div>
       ) : null}
 
-      {/* Date/time */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
-        <label style={{ display: "grid", gap: 6 }}>
-          <span>Start</span>
-          <input
-            type="datetime-local"
-            value={startAtLocal}
-            onChange={(e) => setStartAtLocal(e.target.value)}
-          />
-        </label>
-
-        <label style={{ display: "grid", gap: 6 }}>
-          <span>End</span>
-          <input
-            type="datetime-local"
-            value={endAtLocal}
-            onChange={(e) => setEndAtLocal(e.target.value)}
-          />
-        </label>
-      </div>
-
-      {/* Add line buttons */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-        <button type="button" onClick={() => addLine("item")} disabled={loadingOptions}>
-          + Add inventory item
-        </button>
-        <button type="button" onClick={() => addLine("package")} disabled={loadingOptions}>
-          + Add package
-        </button>
-        {loadingOptions ? <span style={{ opacity: 0.7, alignSelf: "center" }}>Loading…</span> : null}
-      </div>
-
-      {/* Requested lines */}
-      <div style={{ border: "1px solid #ddd", borderRadius: 10, padding: 12, marginBottom: 16 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-          <b>Requested</b>
-          <span style={{ opacity: 0.7 }}>{lines.length} line(s)</span>
-        </div>
-
-        {lines.length === 0 ? (
-          <div style={{ opacity: 0.8 }}>Add items or packages above.</div>
-        ) : (
-          <div style={{ display: "grid", gap: 10 }}>
-            {lines.map((l, idx) => {
-              const isItem = l.type === "item";
-              const options = isItem ? inventoryOptions : packageOptions;
-
-              return (
-                <div
-                  key={idx}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "120px 1fr 140px 90px",
-                    gap: 10,
-                    alignItems: "center",
-                  }}
-                >
-                  <span style={{ opacity: 0.85 }}>{isItem ? "Item" : "Package"}</span>
-
-                  <select value={l.id} onChange={(e) => updateLine(idx, { id: e.target.value })}>
-                    <option value="">Select {isItem ? "item" : "package"}…</option>
-                    {options.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.name ?? o.title ?? `#${o.id}`}
-                      </option>
-                    ))}
-                  </select>
-
-                  <input
-                    type="number"
-                    min="1"
-                    step="1"
-                    value={l.quantity}
-                    onChange={(e) => updateLine(idx, { quantity: e.target.value })}
-                    placeholder="Qty"
-                  />
-
-                  <button type="button" onClick={() => removeLine(idx)}>
-                    Remove
-                  </button>
-                </div>
-              );
-            })}
+      <Card>
+        <CardHeader>
+          <CardTitle>Time window</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="start">Start</Label>
+            <Input
+              id="start"
+              type="datetime-local"
+              value={startAtLocal}
+              onChange={(e) => setStartAtLocal(e.target.value)}
+            />
           </div>
-        )}
-      </div>
 
-      {/* Check button */}
-      <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 18 }}>
-        <button type="button" onClick={checkAvailability} disabled={!canCheck || checking}>
-          {checking ? "Checking…" : "Check availability"}
-        </button>
-        {!canCheck ? (
-          <span style={{ opacity: 0.7 }}>
-            Add dates + at least one line (and ensure end &gt; start).
-          </span>
-        ) : null}
-      </div>
+          <div className="space-y-2">
+            <Label htmlFor="end">End</Label>
+            <Input
+              id="end"
+              type="datetime-local"
+              value={endAtLocal}
+              onChange={(e) => setEndAtLocal(e.target.value)}
+            />
+          </div>
 
-      {/* Results */}
+          {!canCheck ? (
+            <div className="md:col-span-2 text-xs text-muted-foreground">
+              Add dates + at least one requested line (and ensure end &gt; start).
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Requested</CardTitle>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" onClick={() => addLine("item")} disabled={loadingOptions}>
+              + Add inventory item
+            </Button>
+            <Button type="button" variant="outline" onClick={() => addLine("package")} disabled={loadingOptions}>
+              + Add package
+            </Button>
+          </div>
+        </CardHeader>
+
+        <CardContent className="space-y-3">
+          <div className="flex items-center justify-between text-sm">
+            <div className="text-muted-foreground">
+              Lines: <span className="font-medium text-foreground">{lines.length}</span>
+            </div>
+            {loadingOptions ? <span className="text-muted-foreground">Loading…</span> : null}
+          </div>
+
+          <Separator />
+
+          {lines.length === 0 ? (
+            <div className="text-sm text-muted-foreground">Add items or packages above.</div>
+          ) : (
+            <div className="space-y-2">
+              {lines.map((l, idx) => {
+                const isItem = l.type === "item";
+                const options = isItem ? inventoryOptions : packageOptions;
+
+                return (
+                  <div key={idx} className="rounded-md border p-3">
+                    <div className="grid gap-3 md:grid-cols-12 md:items-end">
+                      <div className="md:col-span-2">
+                        <div className="text-xs text-muted-foreground mb-2">Type</div>
+                        <Badge variant="secondary">{isItem ? "Item" : "Package"}</Badge>
+                      </div>
+
+                      <div className="md:col-span-7 space-y-2">
+                        <Label className="text-xs text-muted-foreground">
+                          {isItem ? "Inventory item" : "Package"}
+                        </Label>
+                        <select
+                          value={l.id}
+                          onChange={(e) => updateLine(idx, { id: e.target.value })}
+                          className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        >
+                          <option value="">Select {isItem ? "item" : "package"}…</option>
+                          {options.map((o) => (
+                            <option key={o.id} value={o.id}>
+                              {o.name ?? o.title ?? `#${o.id}`}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="md:col-span-2 space-y-2">
+                        <Label className="text-xs text-muted-foreground">Qty</Label>
+                        <Input
+                          type="number"
+                          min="1"
+                          step="1"
+                          value={l.quantity}
+                          onChange={(e) => updateLine(idx, { quantity: e.target.value })}
+                        />
+                      </div>
+
+                      <div className="md:col-span-1 flex md:justify-end">
+                        <Button type="button" variant="destructive" size="sm" onClick={() => removeLine(idx)}>
+                          Remove
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <Button type="button" onClick={checkAvailability} disabled={!canCheck || checking}>
+              {checking ? "Checking…" : "Check availability"}
+            </Button>
+            {!canCheck ? (
+              <span className="text-xs text-muted-foreground">Fill dates + add at least one line.</span>
+            ) : null}
+          </div>
+        </CardContent>
+      </Card>
+
       {result ? (
-        <div style={{ border: "1px solid #ddd", borderRadius: 10, padding: 12 }}>
-          <div style={{ marginBottom: 12, fontSize: 18 }}>
-            <b>{statusText}</b>
-          </div>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Result</CardTitle>
+            <Badge variant={result.ok ? "default" : "destructive"}>{statusText}</Badge>
+          </CardHeader>
 
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr>
-                  <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #eee" }}>
-                    Inventory Item
-                  </th>
-                  <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>
-                    Required
-                  </th>
-                  <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>
-                    Available
-                  </th>
-                  <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>
-                    Shortage
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {result.requirements.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} style={{ padding: 8, opacity: 0.8 }}>
-                      No breakdown returned by the API.
-                      <br />
-                      <span style={{ opacity: 0.7 }}>
-                        If previewAvailability returns a different key than requirements/items/shortages,
-                        paste its JSON response and I’ll map it exactly.
-                      </span>
-                    </td>
-                  </tr>
-                ) : (
-                  result.requirements.map((r, i) => (
-                    <tr key={i}>
-                      <td style={{ padding: 8, borderBottom: "1px solid #f4f4f4" }}>
-                        {r.name || (r.inventory_item_id ? `Item #${r.inventory_item_id}` : "Item")}
-                      </td>
-                      <td style={{ padding: 8, textAlign: "right", borderBottom: "1px solid #f4f4f4" }}>
-                        {safeNum(r.required)}
-                      </td>
-                      <td style={{ padding: 8, textAlign: "right", borderBottom: "1px solid #f4f4f4" }}>
-                        {safeNum(r.available)}
-                      </td>
-                      <td style={{ padding: 8, textAlign: "right", borderBottom: "1px solid #f4f4f4" }}>
-                        {safeNum(r.shortage)}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
-            <button type="button" onClick={goToCreateBooking} disabled={!result.ok}>
-              Create booking
-            </button>
-            {!result.ok ? (
-              <span style={{ opacity: 0.7, alignSelf: "center" }}>
-                Fix shortages or change dates to enable booking.
-              </span>
+          <CardContent className="space-y-4">
+            {result.requirements.length === 0 ? (
+              <div className="text-sm text-muted-foreground">
+                No breakdown returned by the API. If your preview response uses different keys, paste it and we’ll map it.
+              </div>
             ) : (
-              <span style={{ opacity: 0.7, alignSelf: "center" }}>
-                Looks good — you can create the booking confidently.
-              </span>
+              <div className="rounded-md border overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Inventory Item</TableHead>
+                      <TableHead className="text-right w-[140px]">Required</TableHead>
+                      <TableHead className="text-right w-[140px]">Available</TableHead>
+                      <TableHead className="text-right w-[140px]">Shortage</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {result.requirements.map((r, i) => (
+                      <TableRow key={i}>
+                        <TableCell className="font-medium">
+                          {r.name || (r.inventory_item_id ? `Item #${r.inventory_item_id}` : "Item")}
+                        </TableCell>
+                        <TableCell className="text-right">{safeNum(r.required)}</TableCell>
+                        <TableCell className="text-right">{safeNum(r.available)}</TableCell>
+                        <TableCell className="text-right">{safeNum(r.shortage)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             )}
-          </div>
-        </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="button" onClick={goToCreateBooking} disabled={!result.ok}>
+                Create booking
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                {result.ok
+                  ? "Looks good — you can create the booking confidently."
+                  : "Fix shortages or change dates to enable booking."}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
       ) : null}
     </div>
   );
