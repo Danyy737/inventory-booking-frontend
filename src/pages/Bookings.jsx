@@ -1,7 +1,13 @@
 // src/pages/Bookings.jsx
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { cancelBooking, listBookings } from "../api/bookings";
+
+import PageHeader from "../components/PageHeader";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 export default function Bookings() {
   const [rows, setRows] = useState([]);
@@ -49,105 +55,138 @@ export default function Bookings() {
     }
   }
 
+  const counts = useMemo(() => {
+    let upcoming = 0;
+    let completed = 0;
+    let cancelled = 0;
+
+    for (const b of rows) {
+      const raw = String(b?.status ?? "").toLowerCase();
+      if (raw === "cancelled") cancelled++;
+      else if (isCompleted(b)) completed++;
+      else upcoming++;
+    }
+
+    return { upcoming, completed, cancelled, total: rows.length };
+  }, [rows]);
+
   return (
-    <div style={{ padding: 16 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <h2 style={{ margin: 0 }}>Bookings</h2>
-        <Link to="/bookings/new">+ New booking</Link>
+    <div className="space-y-6">
+      <PageHeader
+        title="Bookings"
+        description="Create and manage bookings. Cancelling is blocked once a booking has started."
+        right={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={load} disabled={loading}>
+              Refresh
+            </Button>
+            <Button asChild>
+              <Link to="/bookings/new">New booking</Link>
+            </Button>
+          </div>
+        }
+      />
+
+      <div className="flex flex-wrap gap-2">
+        <Badge variant="secondary">Total: {counts.total}</Badge>
+        <Badge variant="secondary">Upcoming: {counts.upcoming}</Badge>
+        <Badge variant="secondary">Completed: {counts.completed}</Badge>
+        <Badge variant="secondary">Cancelled: {counts.cancelled}</Badge>
       </div>
 
-      {err && <div style={{ marginTop: 10, color: "crimson" }}>{err}</div>}
-
-      {loading ? (
-        <div style={{ marginTop: 12 }}>Loading…</div>
-      ) : (
-        <div style={{ marginTop: 12, overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                <th style={th}>ID</th>
-                <th style={th}>Start</th>
-                <th style={th}>End</th>
-                <th style={th}>Status</th>
-                <th style={th}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((b) => {
-                const statusLabel = getDisplayStatus(b);
-                const cancellable = isCancellable(b);
-
-                return (
-                  <tr key={b.id}>
-                    <td style={td}>{b.id}</td>
-                    <td style={td}>{fmt(b.start_at)}</td>
-                    <td style={td}>{fmt(b.end_at)}</td>
-                    <td style={td}>
-                      <StatusPill status={statusLabel} />
-                    </td>
-                    <td style={td}>
-                      <Link to={`/bookings/${b.id}`}>View</Link>
-
-                      {cancellable ? (
-                        <>
-                          {" "}
-                          ·{" "}
-                          <button onClick={() => onCancel(b.id)} style={btnLink}>
-                            Cancel
-                          </button>
-                        </>
-                      ) : (
-                        <span style={{ marginLeft: 10, color: "#777", fontSize: 13 }}>
-                          {String(b.status).toLowerCase() === "cancelled"
-                            ? "—"
-                            : isCompleted(b)
-                              ? "Completed"
-                              : "Started"}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-
-              {rows.length === 0 && (
-                <tr>
-                  <td style={td} colSpan={5}>
-                    No bookings yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+      {err ? (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+          {err}
         </div>
-      )}
+      ) : null}
 
-      <div style={{ marginTop: 14 }}>
-        <button onClick={load}>Refresh</button>
-      </div>
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">All bookings</CardTitle>
+        </CardHeader>
+
+        <CardContent>
+          {loading ? (
+            <div className="text-sm text-muted-foreground">Loading…</div>
+          ) : rows.length === 0 ? (
+            <div className="text-sm text-muted-foreground flex items-center justify-between gap-4">
+              <div>No bookings yet.</div>
+              <Button asChild>
+                <Link to="/bookings/new">Create your first booking</Link>
+              </Button>
+            </div>
+          ) : (
+            <div className="rounded-md border overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[80px]">ID</TableHead>
+                    <TableHead>Start</TableHead>
+                    <TableHead>End</TableHead>
+                    <TableHead className="w-[140px]">Status</TableHead>
+                    <TableHead className="w-[220px] text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+
+                <TableBody>
+                  {rows.map((b) => {
+                    const statusLabel = getDisplayStatus(b);
+                    const cancellable = isCancellable(b);
+                    const meta =
+                      String(b.status).toLowerCase() === "cancelled"
+                        ? "—"
+                        : isCompleted(b)
+                        ? "Completed"
+                        : isStarted(b)
+                        ? "Started"
+                        : "Upcoming";
+
+                    return (
+                      <TableRow key={b.id}>
+                        <TableCell className="font-medium">{b.id}</TableCell>
+                        <TableCell>{fmt(b.start_at)}</TableCell>
+                        <TableCell>{fmt(b.end_at)}</TableCell>
+                        <TableCell>
+                          <StatusBadge status={statusLabel} />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="inline-flex items-center gap-2 justify-end">
+                            <Button asChild variant="outline" size="sm">
+                              <Link to={`/bookings/${b.id}`}>View</Link>
+                            </Button>
+
+                            {cancellable ? (
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => onCancel(b.id)}
+                              >
+                                Cancel
+                              </Button>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">{meta}</span>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
-function StatusPill({ status }) {
+function StatusBadge({ status }) {
   const s = String(status || "").toLowerCase();
-  const bg =
-    s === "confirmed" ? "#e8fff0" :
-    s === "cancelled" ? "#ffecec" :
-    s === "completed" ? "#f3f3f3" :
-    "#f3f3f3";
-
-  const fg =
-    s === "confirmed" ? "#0a7a2f" :
-    s === "cancelled" ? "#a10000" :
-    s === "completed" ? "#333" :
-    "#333";
-
-  return (
-    <span style={{ padding: "2px 8px", borderRadius: 999, background: bg, color: fg, fontSize: 13 }}>
-      {status}
-    </span>
-  );
+  if (s === "confirmed") return <Badge>Confirmed</Badge>;
+  if (s === "cancelled") return <Badge variant="destructive">Cancelled</Badge>;
+  if (s === "completed") return <Badge variant="secondary">Completed</Badge>;
+  return <Badge variant="secondary">{status || "—"}</Badge>;
 }
 
 function fmt(iso) {
@@ -174,7 +213,6 @@ function getDisplayStatus(b) {
   const raw = String(b?.status ?? "");
   if (raw.toLowerCase() === "cancelled") return "Cancelled";
   if (isCompleted(b)) return "Completed";
-  // Normalize casing if backend is lowercase
   if (raw) return raw.charAt(0).toUpperCase() + raw.slice(1);
   return "—";
 }
@@ -218,26 +256,3 @@ function sortKey(b) {
   if (isCompleted(b)) return 1;
   return 0;
 }
-
-const th = {
-  textAlign: "left",
-  padding: "8px 6px",
-  borderBottom: "1px solid #eee",
-  fontSize: 13,
-};
-
-const td = {
-  padding: "8px 6px",
-  borderBottom: "1px solid #f3f3f3",
-  fontSize: 14,
-};
-
-const btnLink = {
-  background: "transparent",
-  border: "none",
-  padding: 0,
-  color: "#0b5fff",
-  cursor: "pointer",
-  textDecoration: "underline",
-  fontSize: 14,
-};
