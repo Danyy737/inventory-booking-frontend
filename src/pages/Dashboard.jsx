@@ -2,6 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 
+import PageHeader from "../components/PageHeader";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+
 function isAdminLike(role) {
   return role === "owner" || role === "admin";
 }
@@ -23,6 +29,7 @@ export default function Dashboard() {
     if (!joinCode) return;
     try {
       await navigator.clipboard.writeText(joinCode);
+      // Keep it simple for now. Later we can replace with a toast.
       alert("Join code copied.");
     } catch {
       window.prompt("Copy join code:", joinCode);
@@ -67,84 +74,142 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role, currentOrganisation?.id]);
 
+  const roleLabel = role || "unknown";
+  const orgLabel = currentOrganisation?.name
+    ? `${currentOrganisation.name} (ID ${currentOrganisation.id})`
+    : "Not available";
+
   return (
-    <div style={{ padding: 20, maxWidth: 900 }}>
-      <h2>Dashboard</h2>
+    <div className="space-y-6">
+      <PageHeader
+        title="Dashboard"
+        description="Organisation overview and member access."
+        right={
+          isAdminLike(role) ? (
+            <Button variant="outline" onClick={fetchMembers} disabled={loadingMembers}>
+              Refresh members
+            </Button>
+          ) : null
+        }
+      />
 
-      <div style={{ border: "1px solid #ddd", padding: 16, marginTop: 16 }}>
-        <h3 style={{ marginTop: 0 }}>Organisation</h3>
-
-        <div style={{ display: "grid", gap: 6 }}>
-          <div>
-            <strong>Signed in as:</strong> {user?.email}
-          </div>
-
-          <div>
-            <strong>Role:</strong> {role || "Not available"}
-          </div>
-
-          <div>
-            <strong>Current organisation:</strong>{" "}
-            {currentOrganisation?.name
-              ? `${currentOrganisation.name} (ID ${currentOrganisation.id})`
-              : "Not available"}
-          </div>
-
-          {isAdminLike(role) && (
-            <div style={{ marginTop: 10 }}>
-              <strong>Join code:</strong>{" "}
-              <code style={{ padding: "2px 6px", border: "1px solid #ddd" }}>
-                {joinCode || "Not available"}
-              </code>
-
-              {joinCode && (
-                <button type="button" onClick={copyJoinCode} style={{ marginLeft: 10 }}>
-                  Copy
-                </button>
-              )}
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Organisation</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <div className="flex flex-wrap gap-x-2 gap-y-1">
+              <div className="text-muted-foreground">Signed in as:</div>
+              <div className="font-medium">{user?.email || "—"}</div>
             </div>
-          )}
-        </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="text-muted-foreground">Role:</div>
+              <Badge variant={isAdminLike(role) ? "default" : "secondary"}>{roleLabel}</Badge>
+            </div>
+
+            <div className="flex flex-wrap gap-x-2 gap-y-1">
+              <div className="text-muted-foreground">Current organisation:</div>
+              <div className="font-medium">{orgLabel}</div>
+            </div>
+
+            {isAdminLike(role) ? (
+              <div className="pt-2">
+                <div className="text-muted-foreground mb-2">Join code</div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="rounded-md border bg-muted px-3 py-2 font-mono text-sm">
+                    {joinCode || "Not available"}
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={copyJoinCode}
+                    disabled={!joinCode}
+                  >
+                    Copy
+                  </Button>
+                </div>
+
+                <div className="text-xs text-muted-foreground mt-2">
+                  Share this code to let staff join your organisation.
+                </div>
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Quick actions</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2">
+            <Button asChild>
+              <a href="/bookings/new">New booking</a>
+            </Button>
+            <Button variant="outline" asChild>
+              <a href="/inventory">Manage inventory</a>
+            </Button>
+            <Button variant="outline" asChild>
+              <a href="/packages">Build packages</a>
+            </Button>
+            <Button variant="outline" asChild>
+              <a href="/addons">Manage addons</a>
+            </Button>
+          </CardContent>
+        </Card>
       </div>
 
-      {isAdminLike(role) && (
-        <div style={{ border: "1px solid #ddd", padding: 16, marginTop: 16 }}>
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <h3 style={{ margin: 0 }}>Members</h3>
-            <button type="button" onClick={fetchMembers} disabled={loadingMembers}>
+      {isAdminLike(role) ? (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Members</CardTitle>
+            <Button variant="outline" size="sm" onClick={fetchMembers} disabled={loadingMembers}>
               Refresh
-            </button>
-          </div>
+            </Button>
+          </CardHeader>
 
-          {membersErr && <div style={{ color: "crimson", marginTop: 10 }}>{membersErr}</div>}
+          <CardContent>
+            {membersErr ? (
+              <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                {membersErr}
+              </div>
+            ) : null}
 
-          {loadingMembers ? (
-            <div style={{ marginTop: 10 }}>Loading…</div>
-          ) : members.length === 0 ? (
-            <div style={{ marginTop: 10 }}>No members found.</div>
-          ) : (
-            <div style={{ marginTop: 10, border: "1px solid #eee" }}>
-              {members.map((m) => (
-                <div
-                  key={m.id}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1.5fr 0.6fr",
-                    gap: 10,
-                    padding: 10,
-                    borderTop: "1px solid #eee",
-                    alignItems: "center",
-                  }}
-                >
-                  <div>{m.name}</div>
-                  <div style={{ color: "#555" }}>{m.email}</div>
-                  <div style={{ fontWeight: 600 }}>{m.role}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+            {loadingMembers ? (
+              <div className="text-sm text-muted-foreground mt-3">Loading…</div>
+            ) : members.length === 0 ? (
+              <div className="text-sm text-muted-foreground mt-3">No members found.</div>
+            ) : (
+              <div className="mt-3 rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead className="w-[140px]">Role</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {members.map((m) => (
+                      <TableRow key={m.id}>
+                        <TableCell className="font-medium">{m.name}</TableCell>
+                        <TableCell className="text-muted-foreground">{m.email}</TableCell>
+                        <TableCell>
+                          <Badge variant={m.role === "owner" ? "default" : "secondary"}>{m.role}</Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }

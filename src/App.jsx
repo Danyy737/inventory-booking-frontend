@@ -1,48 +1,56 @@
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 
 import RequireAuth from "./auth/RequireAuth";
 import AppLayout from "./layouts/AppLayout";
 
 import Login from "./pages/Login";
+import Register from "./pages/Register";
+import Onboarding from "./pages/Onboarding";
+
 import Dashboard from "./pages/Dashboard";
 import Inventory from "./pages/Inventory";
 import Packages from "./pages/Packages";
 import Bookings from "./pages/Bookings";
 import Availability from "./pages/Availability";
 import SelectOrganisation from "./pages/SelectOrganisation";
-import Onboarding from "./pages/Onboarding";
-import Register from "./pages/Register";
+
 import BookingNew from "./pages/BookingNew";
 import BookingDetail from "./pages/BookingDetail";
+
 import Addons from "./pages/Addons";
 import AddonForm from "./pages/AddonForm";
 
 export default function App() {
   return (
     <Routes>
-      {/* Public route */}
+      {/* Public routes */}
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
 
-      {/* Everything below requires login */}
+      {/* Protected routes */}
       <Route element={<RequireAuth />}>
-        {/* Onboarding must NOT be inside AppLayout */}
+        {/* Onboarding must NOT use AppLayout */}
         <Route path="/onboarding" element={<Onboarding />} />
 
-        {/* Everything below uses AppLayout */}
+        {/* App layout shell */}
         <Route element={<AppLayout />}>
+          {/* Dashboard lives at "/" */}
           <Route path="/" element={<Dashboard />} />
+
+          {/* Redirect /dashboard -> / */}
+          <Route path="/dashboard" element={<Navigate to="/" replace />} />
+
           <Route path="/inventory" element={<Inventory />} />
           <Route path="/packages" element={<Packages />} />
           <Route path="/bookings" element={<Bookings />} />
+          <Route path="/bookings/new" element={<BookingNew />} />
+          <Route path="/bookings/:id" element={<BookingDetail />} />
           <Route path="/availability" element={<Availability />} />
           <Route path="/select-organisation" element={<SelectOrganisation />} />
-          <Route path="/packages" element={<Packages />} />
-<Route path="/bookings/new" element={<BookingNew />} />
-<Route path="/bookings/:id" element={<BookingDetail />} />
-<Route path="/addons" element={<Addons />} />
-<Route path="/addons/new" element={<AddonForm mode="create" />} />
-<Route path="/addons/:id/edit" element={<AddonForm mode="edit" />} />
+
+          <Route path="/addons" element={<Addons />} />
+          <Route path="/addons/new" element={<AddonForm mode="create" />} />
+          <Route path="/addons/:id/edit" element={<AddonForm mode="edit" />} />
         </Route>
       </Route>
     </Routes>
