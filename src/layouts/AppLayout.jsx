@@ -3,15 +3,24 @@ import { useAuth } from "../auth/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import {
+  LayoutDashboard,
+  Boxes,
+  Package,
+  PlusCircle,
+  Calendar,
+  Clock,
+  Building,
+} from "lucide-react";
 
 const navItems = [
-  { to: "/", label: "Dashboard" },
-  { to: "/inventory", label: "Inventory" },
-  { to: "/packages", label: "Packages" },
-  { to: "/addons", label: "Addons" },
-  { to: "/bookings", label: "Bookings" },
-  { to: "/availability", label: "Availability" },
-  { to: "/select-organisation", label: "Organisation" },
+  { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
+  { to: "/inventory", label: "Inventory", icon: Boxes },
+  { to: "/packages", label: "Packages", icon: Package },
+  { to: "/addons", label: "Addons", icon: PlusCircle },
+  { to: "/bookings", label: "Bookings", icon: Calendar },
+  { to: "/availability", label: "Availability", icon: Clock },
+  { to: "/select-organisation", label: "Organisation", icon: Building },
 ];
 
 export default function AppLayout() {
@@ -36,9 +45,7 @@ export default function AppLayout() {
               </div>
               <div>
                 <div className="text-sm font-semibold">Inventory Booking</div>
-                <div className="text-xs text-muted-foreground">
-                  SaaS Admin
-                </div>
+                <div className="text-xs text-muted-foreground">SaaS Admin</div>
               </div>
             </div>
           </div>
@@ -48,7 +55,13 @@ export default function AppLayout() {
           {/* Navigation */}
           <nav className="p-3 space-y-1">
             {navItems.map((item) => (
-              <NavItem key={item.to} to={item.to} label={item.label} />
+              <NavItem
+                key={item.to}
+                to={item.to}
+                label={item.label}
+                icon={item.icon}
+                end={item.end}
+              />
             ))}
           </nav>
 
@@ -82,9 +95,7 @@ export default function AppLayout() {
                 : "No organisation selected"}
             </div>
 
-            <div className="text-sm font-medium">
-              {user?.email ?? "User"}
-            </div>
+            <div className="text-sm font-medium">{user?.email ?? "User"}</div>
           </header>
 
           {/* Page Content */}
@@ -97,21 +108,24 @@ export default function AppLayout() {
   );
 }
 
-function NavItem({ to, label }) {
+function NavItem({ to, label, icon: Icon, end }) {
   return (
     <NavLink
       to={to}
-      end={to === "/"}
+      end={end}
       className={({ isActive }) =>
         [
-          "block rounded-md px-3 py-2 text-sm transition",
+          "group flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition",
           isActive
             ? "bg-muted text-foreground font-medium"
             : "text-muted-foreground hover:bg-muted hover:text-foreground",
         ].join(" ")
       }
     >
-      {label}
+      {Icon ? (
+        <Icon className="h-4 w-4 opacity-80 group-hover:opacity-100" />
+      ) : null}
+      <span className="truncate">{label}</span>
     </NavLink>
   );
 }
