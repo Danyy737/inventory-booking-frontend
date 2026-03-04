@@ -1,6 +1,17 @@
+// src/pages/AddonForm.jsx
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
+
+import PageHeader from "../components/PageHeader";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 function toIntOrZero(v) {
   const n = Number(v);
@@ -8,7 +19,6 @@ function toIntOrZero(v) {
 }
 
 function dollarsToCents(dollars) {
-  // handles "5", "5.5", "5.50"
   const n = Number(dollars);
   if (!Number.isFinite(n)) return 0;
   return Math.round(n * 100);
@@ -43,7 +53,6 @@ export default function AddonForm({ mode }) {
   const canSave = useMemo(() => {
     if (!name.trim()) return false;
     if (!pricingType) return false;
-    // At least one item with inventory id + quantity > 0
     const validItems = items.filter(
       (it) => String(it.inventory_item_id).trim() !== "" && toIntOrZero(it.quantity_per_unit) > 0
     );
@@ -51,18 +60,14 @@ export default function AddonForm({ mode }) {
   }, [name, pricingType, items]);
 
   async function loadInventory() {
-    // If your inventory endpoint differs, change this.
     const res = await api.get("/inventory/items");
     setInventoryOptions(res.data?.data ?? []);
   }
 
   async function loadAddon(addonId) {
-    // If you have a show route, prefer it. Otherwise we can fetch list and find.
-    // Try show first:
     try {
       const res = await api.get(`/addons/${addonId}`);
-      const a = res.data?.data ?? res.data; // handle either style
-      return a;
+      return res.data?.data ?? res.data;
     } catch {
       const res = await api.get("/addons");
       const list = res.data?.data ?? [];
@@ -96,7 +101,7 @@ export default function AddonForm({ mode }) {
           setItems(loadedItems.length ? loadedItems : [{ inventory_item_id: "", quantity_per_unit: 1 }]);
         }
       } catch (e) {
-        setErr("Failed to load addon form.");
+        setErr(e?.response?.data?.message ?? e?.message ?? "Failed to load addon form.");
       } finally {
         setLoading(false);
       }
@@ -105,9 +110,7 @@ export default function AddonForm({ mode }) {
   }, [id, isEdit]);
 
   function updateItem(idx, patch) {
-    setItems((prev) =>
-      prev.map((it, i) => (i === idx ? { ...it, ...patch } : it))
-    );
+    setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
   }
 
   function addItemRow() {
@@ -140,129 +143,179 @@ export default function AddonForm({ mode }) {
     };
 
     try {
-      if (isEdit) {
-        await api.put(`/addons/${id}`, payload);
-      } else {
-        await api.post("/addons", payload);
-      }
+      if (isEdit) await api.put(`/addons/${id}`, payload);
+      else await api.post("/addons", payload);
+
       navigate("/addons");
     } catch (e) {
-      setErr("Save failed. Check required fields and try again.");
+      setErr(e?.response?.data?.message ?? "Save failed. Check required fields and try again.");
     } finally {
       setSaving(false);
     }
   }
 
-  if (loading) return <p>Loading...</p>;
+  if (loading) {
+    return (
+      <div className="p-6">
+        <div className="text-sm text-muted-foreground">Loading…</div>
+      </div>
+    );
+  }
 
   return (
-    <div style={{ padding: 16, maxWidth: 720 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-        <h1 style={{ margin: 0 }}>{isEdit ? "Edit Addon" : "Create Addon"}</h1>
-        <Link to="/addons">Back</Link>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title={isEdit ? "Edit addon" : "Create addon"}
+        description="Addons can reserve one or more inventory items per unit and add pricing to bookings."
+        right={
+          <Button asChild variant="outline">
+            <Link to="/addons">Back</Link>
+          </Button>
+        }
+      />
 
-      {err && <p style={{ color: "crimson" }}>{err}</p>}
+      {err ? (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+          {err}
+        </div>
+      ) : null}
 
-      <form onSubmit={onSubmit} style={{ marginTop: 12, display: "grid", gap: 12 }}>
-        <label>
-          Name
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Extra Chairs" />
-        </label>
+      <form onSubmit={onSubmit} className="space-y-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Addon details</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2 md:col-span-2">
+              <Label>Name</Label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Extra Chairs" />
+            </div>
 
-        <label>
-          Description
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Optional"
-            rows={3}
-          />
-        </label>
+            <div className="space-y-2 md:col-span-2">
+              <Label>Description</Label>
+              <Textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Optional"
+                rows={3}
+              />
+            </div>
 
-        <label>
-          Pricing Type
-          <select value={pricingType} onChange={(e) => setPricingType(e.target.value)}>
-            <option value="per_unit">per_unit</option>
-            <option value="flat_fee">flat_fee</option>
-          </select>
-        </label>
+            <div className="space-y-2">
+              <Label>Pricing type</Label>
+              <select
+                value={pricingType}
+                onChange={(e) => setPricingType(e.target.value)}
+                className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="per_unit">per_unit</option>
+                <option value="flat_fee">flat_fee</option>
+              </select>
+            </div>
 
-        <label>
-          Price (AUD)
-          <input
-            value={priceDollars}
-            onChange={(e) => setPriceDollars(e.target.value)}
-            inputMode="decimal"
-            placeholder="e.g. 5.00"
-          />
-        </label>
+            <div className="space-y-2">
+              <Label>Price (AUD)</Label>
+              <Input
+                value={priceDollars}
+                onChange={(e) => setPriceDollars(e.target.value)}
+                inputMode="decimal"
+                placeholder="e.g. 5.00"
+              />
+            </div>
 
-        <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
-          Active
-        </label>
+            <div className="md:col-span-2 flex items-center gap-3">
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
+                Active
+              </label>
+              <Badge variant={isActive ? "default" : "secondary"}>{isActive ? "Active" : "Inactive"}</Badge>
+            </div>
+          </CardContent>
+        </Card>
 
-        <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-            <strong>Items</strong>
-            <button type="button" onClick={addItemRow}>+ Add item</button>
-          </div>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Items</CardTitle>
+            <Button type="button" variant="outline" onClick={addItemRow}>
+              + Add item
+            </Button>
+          </CardHeader>
 
-          <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
-            {items.map((it, idx) => (
-              <div key={idx} style={{ display: "grid", gridTemplateColumns: "1fr 140px 100px", gap: 10 }}>
-                <label style={{ display: "grid", gap: 6 }}>
-                  Inventory Item
-                  <select
-                    value={it.inventory_item_id}
-                    onChange={(e) => updateItem(idx, { inventory_item_id: e.target.value })}
-                  >
-                    <option value="">Select...</option>
-                    {inventoryOptions.map((inv) => (
-                      <option key={inv.id} value={inv.id}>
-                        {inv.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label style={{ display: "grid", gap: 6 }}>
-                  Qty / Unit
-                  <input
-                    value={it.quantity_per_unit}
-                    onChange={(e) => updateItem(idx, { quantity_per_unit: e.target.value })}
-                    inputMode="numeric"
-                  />
-                </label>
-
-                <div style={{ display: "flex", alignItems: "end" }}>
-                  <button
-                    type="button"
-                    onClick={() => removeItemRow(idx)}
-                    disabled={items.length === 1}
-                    style={{ width: "100%" }}
-                  >
-                    Remove
-                  </button>
-                </div>
-              </div>
-            ))}
-            <div style={{ color: "#666", marginTop: 6 }}>
+          <CardContent className="space-y-3">
+            <div className="text-sm text-muted-foreground">
               Tip: Addons can include multiple inventory items (e.g., chairs + tables per unit).
             </div>
-          </div>
+
+            <Separator />
+
+            <div className="rounded-md border overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Inventory item</TableHead>
+                    <TableHead className="w-[180px]">Qty / Unit</TableHead>
+                    <TableHead className="w-[140px] text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {items.map((it, idx) => (
+                    <TableRow key={idx}>
+                      <TableCell>
+                        <select
+                          value={it.inventory_item_id}
+                          onChange={(e) => updateItem(idx, { inventory_item_id: e.target.value })}
+                          className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        >
+                          <option value="">Select…</option>
+                          {inventoryOptions.map((inv) => (
+                            <option key={inv.id} value={inv.id}>
+                              {inv.name}
+                            </option>
+                          ))}
+                        </select>
+                      </TableCell>
+
+                      <TableCell>
+                        <Input
+                          value={it.quantity_per_unit}
+                          onChange={(e) => updateItem(idx, { quantity_per_unit: e.target.value })}
+                          inputMode="numeric"
+                        />
+                      </TableCell>
+
+                      <TableCell className="text-right">
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => removeItemRow(idx)}
+                          disabled={items.length === 1}
+                        >
+                          Remove
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            {!canSave ? (
+              <div className="text-xs text-muted-foreground">
+                Required: name + at least 1 item with inventory + qty &gt; 0.
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+
+        <div className="flex flex-wrap gap-2">
+          <Button type="submit" disabled={!canSave || saving}>
+            {saving ? "Saving..." : isEdit ? "Save changes" : "Create addon"}
+          </Button>
+          <Button type="button" variant="outline" onClick={() => navigate("/addons")} disabled={saving}>
+            Cancel
+          </Button>
         </div>
-
-        <button type="submit" disabled={!canSave || saving}>
-          {saving ? "Saving..." : isEdit ? "Save Changes" : "Create Addon"}
-        </button>
-
-        {!canSave && (
-          <p style={{ color: "#666", margin: 0 }}>
-            Required: name + at least 1 item with inventory + qty &gt; 0.
-          </p>
-        )}
       </form>
     </div>
   );
