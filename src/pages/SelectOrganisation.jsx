@@ -1,7 +1,20 @@
-import { useEffect, useState } from "react";
+// src/pages/SelectOrganisation.jsx
+import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
+
+import PageHeader from "../components/PageHeader";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+function roleVariant(role) {
+  const r = String(role || "").toLowerCase();
+  if (r === "owner" || r === "admin") return "default";
+  return "secondary";
+}
 
 export default function SelectOrganisation() {
   const [orgs, setOrgs] = useState([]);
@@ -12,79 +25,129 @@ export default function SelectOrganisation() {
   const { refreshMe } = useAuth();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    let isMounted = true;
-
-    async function load() {
-      try {
-        setError("");
-        const res = await api.get("/my/organisations");
-        if (!isMounted) return;
-        setOrgs(res.data?.data ?? []);
-      } catch (e) {
-        if (!isMounted) return;
-        setError(e?.response?.data?.message || "Failed to load organisations.");
-      } finally {
-        if (isMounted) setLoading(false);
-      }
+  async function load({ silent = false } = {}) {
+    if (!silent) setError("");
+    setLoading(true);
+    try {
+      const res = await api.get("/my/organisations");
+      setOrgs(res.data?.data ?? []);
+    } catch (e) {
+      const msg = e?.response?.data?.message || "Failed to load organisations.";
+      setError(msg);
+      toast.error(msg);
+      setOrgs([]);
+    } finally {
+      setLoading(false);
     }
+  }
 
-    load();
-    return () => { isMounted = false; };
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      if (!mounted) return;
+      await load();
+    })();
+    return () => {
+      mounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function handleSelect(orgId) {
+    if (selectingId) return;
+
+    setSelectingId(orgId);
+    setError("");
+
     try {
-      setSelectingId(orgId);
-      setError("");
       await api.post("/me/select-organisation", { organisation_id: orgId });
-      await refreshMe(); // update role/current org in context
-      navigate("/dashboard", { replace: true });
+      await refreshMe();
+
+      toast.success("Organisation selected");
+      navigate("/", { replace: true }); // ✅ dashboard route in your app
     } catch (e) {
-      setError(e?.response?.data?.message || "Failed to select organisation.");
+      const msg = e?.response?.data?.message || "Failed to select organisation.";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setSelectingId(null);
     }
   }
 
-  if (loading) return <div style={{ padding: 20 }}>Loading organisations…</div>;
+  const count = useMemo(() => orgs.length, [orgs.length]);
 
   return (
-    <div style={{ padding: 20, maxWidth: 600 }}>
-      <h2>Select an organisation</h2>
+    <div className="space-y-6">
+      <PageHeader
+        title="Select organisation"
+        description="Choose which organisation you want to manage right now."
+        right={
+          <Button variant="outline" onClick={() => load()} disabled={loading || !!selectingId}>
+            Refresh
+          </Button>
+        }
+      />
 
-      {error && (
-        <div style={{ marginTop: 12, color: "crimson" }}>
+      {error ? (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
           {error}
         </div>
-      )}
+      ) : null}
 
-      {orgs.length === 0 ? (
-        <p style={{ marginTop: 12 }}>
-          You don’t belong to any organisations yet.
-        </p>
-      ) : (
-        <ul style={{ marginTop: 12, paddingLeft: 18 }}>
-          {orgs.map((org) => (
-            <li key={org.id} style={{ marginBottom: 10 }}>
-              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                <div style={{ flex: 1 }}>
-                  <div><strong>{org.name}</strong></div>
-                  <div style={{ opacity: 0.7, fontSize: 12 }}>
-                    role: {org.role ?? "unknown"} • slug: {org.slug ?? "-"}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Your organisations</CardTitle>
+          <Badge variant="secondary">{count}</Badge>
+        </CardHeader>
+
+        <CardContent>
+          {loading ? (
+            <div className="text-sm text-muted-foreground">Loading organisations…</div>
+          ) : orgs.length === 0 ? (
+            <div className="text-sm text-muted-foreground">
+              You don’t belong to any organisations yet.
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {orgs.map((org) => {
+                const isSelecting = selectingId === org.id;
+
+                return (
+                  <div
+                    key={org.id}
+                    className="rounded-xl border bg-card p-4 transition hover:bg-muted/30"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-semibold truncate">{org.name}</div>
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                          <Badge variant={roleVariant(org.role)} className="capitalize">
+                            {org.role ?? "unknown"}
+                          </Badge>
+                          <span>•</span>
+                          <span className="truncate">slug: {org.slug ?? "-"}</span>
+                        </div>
+                      </div>
+
+                      <div className="text-xs text-muted-foreground">#{org.id}</div>
+                    </div>
+
+                    <div className="mt-4">
+                      <Button
+                        className="w-full"
+                        onClick={() => handleSelect(org.id)}
+                        disabled={!!selectingId}
+                      >
+                        {isSelecting ? "Selecting…" : "Select"}
+                      </Button>
+                    </div>
                   </div>
-                </div>
-                <button
-                  onClick={() => handleSelect(org.id)}
-                  disabled={selectingId !== null}
-                >
-                  {selectingId === org.id ? "Selecting…" : "Select"}
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
