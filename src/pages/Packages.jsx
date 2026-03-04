@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
 
+import PageHeader from "../components/PageHeader";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+
 function normalizePackageItems(pkg) {
   const rows = pkg?.package_items ?? [];
   return rows.map((pi) => ({
@@ -37,6 +46,9 @@ export default function Packages() {
   const [addItemId, setAddItemId] = useState("");
   const [addQty, setAddQty] = useState(1);
 
+  // Search/filter in left list
+  const [q, setQ] = useState("");
+
   const inventoryMap = useMemo(() => {
     const map = new Map();
     inventoryItems.forEach((i) => map.set(i.id, i));
@@ -49,6 +61,16 @@ export default function Packages() {
     return Number(inv?.stock?.total_quantity ?? 0);
   }, [addItemId, inventoryMap]);
 
+  const filteredPackages = useMemo(() => {
+    const query = q.trim().toLowerCase();
+    if (!query) return packages;
+    return packages.filter((p) => {
+      const n = String(p.name || "").toLowerCase();
+      const id = String(p.id || "");
+      return n.includes(query) || id.includes(query);
+    });
+  }, [packages, q]);
+
   function clearMessages() {
     setError("");
     setNotice("");
@@ -58,10 +80,7 @@ export default function Packages() {
     clearMessages();
     setLoading(true);
     try {
-      const [pkgRes, invRes] = await Promise.all([
-        api.get("/packages"),
-        api.get("/inventory/items"),
-      ]);
+      const [pkgRes, invRes] = await Promise.all([api.get("/packages"), api.get("/inventory/items")]);
 
       const pkgData = pkgRes.data?.data ?? [];
       const invData = invRes.data?.data ?? [];
@@ -207,12 +226,7 @@ export default function Packages() {
       setNotice("Items saved.");
       await loadSelected(selectedId);
     } catch (e) {
-      setError(
-        e?.response?.data?.message ||
-          JSON.stringify(e?.response?.data) ||
-          e.message ||
-          "Failed to save items"
-      );
+      setError(e?.response?.data?.message || JSON.stringify(e?.response?.data) || e.message || "Failed to save items");
     } finally {
       setBusy(false);
     }
@@ -225,229 +239,270 @@ export default function Packages() {
     setError("");
   }
 
-  if (loading) return <div style={{ padding: 16 }}>Loading...</div>;
+  if (loading) {
+    return (
+      <div className="p-6">
+        <div className="text-sm text-muted-foreground">Loading…</div>
+      </div>
+    );
+  }
 
   return (
-    <div style={{ padding: 16, display: "grid", gridTemplateColumns: "340px 1fr", gap: 16 }}>
-      {/* LEFT */}
-      <div style={{ border: "1px solid #eee", borderRadius: 12, padding: 12 }}>
-        <h2 style={{ marginTop: 0 }}>Packages</h2>
+    <div className="space-y-6">
+      <PageHeader
+        title="Packages"
+        description="Build packages from inventory items. Package quantities cannot exceed current stock."
+        right={
+          <Button variant="outline" onClick={() => loadLists({ keepSelection: true })} disabled={busy}>
+            Refresh
+          </Button>
+        }
+      />
 
-        {error ? (
-          <div style={{ background: "#fff3f3", border: "1px solid #ffd0d0", padding: 10, borderRadius: 10, marginBottom: 10 }}>
-            {error}
-          </div>
-        ) : null}
-
-        {notice ? (
-          <div style={{ background: "#f3fff5", border: "1px solid #c9f2d0", padding: 10, borderRadius: 10, marginBottom: 10 }}>
-            {notice}
-          </div>
-        ) : null}
-
-        {/* Create */}
-        <form onSubmit={createPackage} style={{ display: "grid", gap: 8, marginBottom: 12 }}>
-          <input
-            placeholder="Package name"
-            value={createName}
-            onChange={(e) => setCreateName(e.target.value)}
-            required
-          />
-          <input
-            placeholder="Description (optional)"
-            value={createDesc}
-            onChange={(e) => setCreateDesc(e.target.value)}
-          />
-          <button type="submit" disabled={busy}>
-            {busy ? "Working..." : "Create package"}
-          </button>
-        </form>
-
-        {/* List */}
-        <div style={{ display: "grid", gap: 8 }}>
-          {packages.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => setSelectedId(p.id)}
-              style={{
-                textAlign: "left",
-                padding: 12,
-                borderRadius: 10,
-                border: selectedId === p.id ? "2px solid #333" : "1px solid #eee",
-                background: selectedId === p.id ? "#fafafa" : "white",
-                cursor: "pointer",
-              }}
-            >
-              <div style={{ fontWeight: 700 }}>{p.name}</div>
-              <div style={{ opacity: 0.7, fontSize: 12 }}>#{p.id}</div>
-            </button>
-          ))}
-          {packages.length === 0 ? <div style={{ opacity: 0.7 }}>No packages yet.</div> : null}
+      {error ? (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+          {error}
         </div>
-      </div>
+      ) : null}
 
-      {/* RIGHT */}
-      <div style={{ border: "1px solid #eee", borderRadius: 12, padding: 12 }}>
-        {!selectedId ? (
-          <div style={{ opacity: 0.7 }}>Create or select a package.</div>
-        ) : !selected ? (
-          <div style={{ opacity: 0.7 }}>Loading package...</div>
-        ) : (
-          <div style={{ display: "grid", gap: 18 }}>
-            {/* Details */}
-            <div>
-              <h2 style={{ marginTop: 0 }}>Package details</h2>
+      {notice ? (
+        <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
+          {notice}
+        </div>
+      ) : null}
 
-              <div style={{ display: "grid", gap: 10 }}>
-                <label style={{ display: "grid", gap: 6 }}>
-                  <span style={{ fontSize: 12, opacity: 0.7 }}>Name</span>
-                  <input value={editName} onChange={(e) => setEditName(e.target.value)} />
-                </label>
-
-                <label style={{ display: "grid", gap: 6 }}>
-                  <span style={{ fontSize: 12, opacity: 0.7 }}>Description</span>
-                  <input value={editDesc} onChange={(e) => setEditDesc(e.target.value)} />
-                </label>
-
-                <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <input
-                    type="checkbox"
-                    checked={editActive}
-                    onChange={(e) => setEditActive(e.target.checked)}
-                  />
-                  <span style={{ fontSize: 14 }}>Active</span>
-                </label>
-
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button type="button" onClick={saveDetails} disabled={busy}>
-                    {busy ? "Working..." : "Save details"}
-                  </button>
-                  <button type="button" onClick={() => loadSelected(selectedId)} disabled={busy}>
-                    Reset
-                  </button>
-
-                  {/* Delete not implemented yet */}
-                  <button
-                    type="button"
-                    disabled
-                    title="Delete endpoint not implemented yet"
-                    style={{ marginLeft: "auto", opacity: 0.5 }}
-                  >
-                    Delete (soon)
-                  </button>
+      <div className="grid gap-4 lg:grid-cols-12">
+        {/* LEFT */}
+        <div className="lg:col-span-4 space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Create package</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={createPackage} className="space-y-3">
+                <div className="space-y-2">
+                  <Label>Package name</Label>
+                  <Input value={createName} onChange={(e) => setCreateName(e.target.value)} required />
                 </div>
+                <div className="space-y-2">
+                  <Label>Description (optional)</Label>
+                  <Input value={createDesc} onChange={(e) => setCreateDesc(e.target.value)} />
+                </div>
+                <Button type="submit" disabled={busy}>
+                  {busy ? "Working..." : "Create package"}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle>All packages</CardTitle>
+                <Badge variant="secondary">{packages.length}</Badge>
               </div>
-            </div>
+              <Input placeholder="Search packages…" value={q} onChange={(e) => setQ(e.target.value)} />
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {filteredPackages.length === 0 ? (
+                <div className="text-sm text-muted-foreground">No packages yet.</div>
+              ) : (
+                filteredPackages.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setSelectedId(p.id)}
+                    className={[
+                      "w-full text-left rounded-md border px-3 py-2 transition",
+                      selectedId === p.id ? "bg-muted border-border" : "hover:bg-muted/60",
+                    ].join(" ")}
+                  >
+                    <div className="font-medium">{p.name}</div>
+                    <div className="text-xs text-muted-foreground">#{p.id}</div>
+                  </button>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        </div>
 
-            {/* Items */}
-            <div style={{ borderTop: "1px solid #eee", paddingTop: 14 }}>
-              <h2 style={{ marginTop: 0 }}>Package items</h2>
+        {/* RIGHT */}
+        <div className="lg:col-span-8 space-y-4">
+          {!selectedId ? (
+            <Card>
+              <CardContent className="p-6 text-sm text-muted-foreground">Create or select a package.</CardContent>
+            </Card>
+          ) : !selected ? (
+            <Card>
+              <CardContent className="p-6 text-sm text-muted-foreground">Loading package…</CardContent>
+            </Card>
+          ) : (
+            <>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Package details</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Name</Label>
+                      <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
+                    </div>
 
-              <div style={{ fontSize: 13, opacity: 0.7, marginBottom: 10 }}>
-                Add items below. Quantity cannot exceed your current stock. Click <b>Save items</b> to apply changes.
-              </div>
+                    <div className="space-y-2">
+                      <Label>Description</Label>
+                      <Input value={editDesc} onChange={(e) => setEditDesc(e.target.value)} />
+                    </div>
 
-              {/* Add row */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 140px 120px", gap: 10, alignItems: "end" }}>
-                <label style={{ display: "grid", gap: 6 }}>
-                  <span style={{ fontSize: 12, opacity: 0.7 }}>Inventory item</span>
-                  <select value={addItemId} onChange={(e) => setAddItemId(e.target.value)}>
-                    <option value="">Select item...</option>
-                    {inventoryItems.map((it) => (
-                      <option key={it.id} value={it.id}>
-                        {it.name} (stock: {Number(it.stock?.total_quantity ?? 0)})
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                    <div className="md:col-span-2 flex items-center gap-3">
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={editActive}
+                          onChange={(e) => setEditActive(e.target.checked)}
+                        />
+                        Active
+                      </label>
+                      <Badge variant={editActive ? "default" : "secondary"}>{editActive ? "Active" : "Inactive"}</Badge>
+                    </div>
+                  </div>
 
-                <label style={{ display: "grid", gap: 6 }}>
-                  <span style={{ fontSize: 12, opacity: 0.7 }}>
-                    Qty {addItemId ? `(max ${selectedAddStock})` : ""}
-                  </span>
-                  <input
-                    type="number"
-                    min="1"
-                    max={addItemId ? (selectedAddStock || 1) : 1}
-                    value={addQty}
-                    onChange={(e) => setAddQty(e.target.value)}
-                  />
-                </label>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" onClick={saveDetails} disabled={busy}>
+                      {busy ? "Working..." : "Save details"}
+                    </Button>
+                    <Button type="button" variant="outline" onClick={() => loadSelected(selectedId)} disabled={busy}>
+                      Reset
+                    </Button>
 
-                <button
-                  type="button"
-                  disabled={!addItemId || busy}
-                  onClick={() => {
-                    upsertItem(addItemId, addQty);
-                    setAddItemId("");
-                    setAddQty(1);
-                  }}
-                >
-                  Add
-                </button>
-              </div>
+                    <Button type="button" variant="outline" disabled title="Delete endpoint not implemented yet" className="ml-auto">
+                      Delete (soon)
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
 
-              {/* Items list */}
-              <div style={{ marginTop: 12, border: "1px solid #eee", borderRadius: 10 }}>
-                {draftItems.length === 0 ? (
-                  <div style={{ padding: 12, opacity: 0.7 }}>No items yet.</div>
-                ) : (
-                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                    <thead>
-                      <tr>
-                        <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #eee" }}>Item</th>
-                        <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #eee", width: 160 }}>Qty</th>
-                        <th style={{ padding: 10, borderBottom: "1px solid #eee", width: 120 }} />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {draftItems.map((x) => {
-                        const stock = Number(inventoryMap.get(x.inventory_item_id)?.stock?.total_quantity ?? 0);
+              <Card>
+                <CardHeader className="space-y-2">
+                  <CardTitle>Package items</CardTitle>
+                  <div className="text-sm text-muted-foreground">
+                    Add items below. Quantity cannot exceed your current stock. Click <b>Save items</b> to apply changes.
+                  </div>
+                </CardHeader>
 
-                        return (
-                          <tr key={x.inventory_item_id}>
-                            <td style={{ padding: 10, borderBottom: "1px solid #f3f3f3" }}>
-                              <div style={{ fontWeight: 600 }}>{x.name}</div>
-                              <div style={{ fontSize: 12, opacity: 0.6 }}>
-                                ID: {x.inventory_item_id} • Stock: {stock}
-                              </div>
-                            </td>
-                            <td style={{ padding: 10, borderBottom: "1px solid #f3f3f3" }}>
-                              <input
-                                type="number"
-                                min="1"
-                                max={stock || 1}
-                                value={x.quantity}
-                                onChange={(e) => upsertItem(x.inventory_item_id, e.target.value)}
-                                style={{ width: 110 }}
-                              />
-                            </td>
-                            <td style={{ padding: 10, borderBottom: "1px solid #f3f3f3", textAlign: "right" }}>
-                              <button type="button" onClick={() => removeItem(x.inventory_item_id)} disabled={busy}>
-                                Remove
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                )}
-              </div>
+                <CardContent className="space-y-4">
+                  {/* Add row */}
+                  <div className="grid gap-3 md:grid-cols-12 md:items-end">
+                    <div className="md:col-span-7 space-y-2">
+                      <Label>Inventory item</Label>
+                      <select
+                        value={addItemId}
+                        onChange={(e) => setAddItemId(e.target.value)}
+                        className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      >
+                        <option value="">Select item...</option>
+                        {inventoryItems.map((it) => (
+                          <option key={it.id} value={it.id}>
+                            {it.name} (stock: {Number(it.stock?.total_quantity ?? 0)})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-              {/* Actions */}
-              <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                <button type="button" onClick={saveItems} disabled={busy || draftItems.length === 0}>
-                  {busy ? "Working..." : "Save items"}
-                </button>
-                <button type="button" onClick={resetItems} disabled={busy}>
-                  Reset items
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+                    <div className="md:col-span-3 space-y-2">
+                      <Label>
+                        Qty {addItemId ? <span className="text-muted-foreground">(max {selectedAddStock})</span> : null}
+                      </Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        max={addItemId ? (selectedAddStock || 1) : 1}
+                        value={addQty}
+                        onChange={(e) => setAddQty(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <Button
+                        type="button"
+                        className="w-full"
+                        disabled={!addItemId || busy}
+                        onClick={() => {
+                          upsertItem(addItemId, addQty);
+                          setAddItemId("");
+                          setAddQty(1);
+                        }}
+                      >
+                        Add
+                      </Button>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Items list */}
+                  {draftItems.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">No items yet.</div>
+                  ) : (
+                    <div className="rounded-md border overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Item</TableHead>
+                            <TableHead className="w-[180px]">Qty</TableHead>
+                            <TableHead className="w-[140px] text-right">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {draftItems.map((x) => {
+                            const stock = Number(inventoryMap.get(x.inventory_item_id)?.stock?.total_quantity ?? 0);
+
+                            return (
+                              <TableRow key={x.inventory_item_id}>
+                                <TableCell>
+                                  <div className="font-medium">{x.name}</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    ID: {x.inventory_item_id} • Stock: {stock}
+                                  </div>
+                                </TableCell>
+
+                                <TableCell>
+                                  <Input
+                                    type="number"
+                                    min="1"
+                                    max={stock || 1}
+                                    value={x.quantity}
+                                    onChange={(e) => upsertItem(x.inventory_item_id, e.target.value)}
+                                    className="w-32"
+                                  />
+                                </TableCell>
+
+                                <TableCell className="text-right">
+                                  <Button type="button" variant="destructive" size="sm" onClick={() => removeItem(x.inventory_item_id)} disabled={busy}>
+                                    Remove
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" onClick={saveItems} disabled={busy || draftItems.length === 0}>
+                      {busy ? "Working..." : "Save items"}
+                    </Button>
+                    <Button type="button" variant="outline" onClick={resetItems} disabled={busy}>
+                      Reset items
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
