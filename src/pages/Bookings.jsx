@@ -1,6 +1,6 @@
 // src/pages/Bookings.jsx
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { cancelBooking, listBookings } from "../api/bookings";
 import { toast } from "sonner";
 
@@ -9,14 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
 
 import {
@@ -39,6 +31,8 @@ const FILTERS = [
 ];
 
 export default function Bookings() {
+  const nav = useNavigate();
+
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busyCancelId, setBusyCancelId] = useState(null);
@@ -80,7 +74,7 @@ export default function Bookings() {
   }, []);
 
   async function onCancel(id) {
-    if (busyCancelId) return; // prevent double cancel spam
+    if (busyCancelId) return;
 
     setBusyCancelId(id);
     try {
@@ -113,29 +107,58 @@ export default function Bookings() {
   const filteredRows = useMemo(() => {
     let out = rows;
 
+    // filter bucket
     if (filter === "upcoming") {
       out = out.filter(
-        (b) => String(b?.status ?? "").toLowerCase() !== "cancelled" && !isCompleted(b)
+        (b) =>
+          String(b?.status ?? "").toLowerCase() !== "cancelled" && !isCompleted(b)
       );
     } else if (filter === "completed") {
       out = out.filter(
-        (b) => String(b?.status ?? "").toLowerCase() !== "cancelled" && isCompleted(b)
+        (b) =>
+          String(b?.status ?? "").toLowerCase() !== "cancelled" && isCompleted(b)
       );
     } else if (filter === "cancelled") {
-      out = out.filter((b) => String(b?.status ?? "").toLowerCase() === "cancelled");
+      out = out.filter(
+        (b) => String(b?.status ?? "").toLowerCase() === "cancelled"
+      );
     }
 
+    // id search
     const query = q.trim();
     if (query) out = out.filter((b) => String(b.id).includes(query));
 
     return out;
   }, [rows, filter, q]);
 
+  // calendar-style grouping by start date (local)
+  const groupedDays = useMemo(() => {
+    const map = new Map(); // key: YYYY-MM-DD -> bookings[]
+    for (const b of filteredRows) {
+      const key = dayKeyLocal(b?.start_at);
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(b);
+    }
+
+    // sort each day by start time asc
+    for (const [k, arr] of map.entries()) {
+      arr.sort(
+        (a, b) =>
+          (new Date(a.start_at).getTime() || 0) - (new Date(b.start_at).getTime() || 0)
+      );
+      map.set(k, arr);
+    }
+
+    // sort day keys asc
+    const keys = Array.from(map.keys()).sort((a, b) => (a < b ? -1 : 1));
+    return keys.map((k) => ({ dayKey: k, label: dayLabelFromKey(k), items: map.get(k) }));
+  }, [filteredRows]);
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Bookings"
-        description="Create and manage bookings. Cancelling is blocked once a booking has started."
+        description="Calendar-style agenda view. Cancelling is blocked once a booking has started."
         right={
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => load()} disabled={loading}>
@@ -148,11 +171,12 @@ export default function Bookings() {
         }
       />
 
+      {/* insight cards */}
       <div className="grid gap-3 md:grid-cols-4">
-        <StatCard label="Total" value={counts.total} />
-        <StatCard label="Upcoming" value={counts.upcoming} />
-        <StatCard label="Completed" value={counts.completed} />
-        <StatCard label="Cancelled" value={counts.cancelled} />
+        <MiniStat label="Total" value={counts.total} />
+        <MiniStat label="Upcoming" value={counts.upcoming} />
+        <MiniStat label="Completed" value={counts.completed} />
+        <MiniStat label="Cancelled" value={counts.cancelled} />
       </div>
 
       {err ? (
@@ -164,18 +188,17 @@ export default function Bookings() {
       <Card>
         <CardHeader className="space-y-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <CardTitle className="text-base">Manage bookings</CardTitle>
+            <CardTitle className="text-base">Agenda</CardTitle>
 
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <Input
-                className="sm:w-56"
-                placeholder="Search by booking ID…"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-              />
-            </div>
+            <Input
+              className="md:w-64"
+              placeholder="Search by booking ID…"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
           </div>
 
+          {/* filter tabs */}
           <div className="flex flex-wrap gap-2">
             {FILTERS.map((f) => (
               <Button
@@ -193,7 +216,7 @@ export default function Bookings() {
           <Separator />
         </CardHeader>
 
-        <CardContent>
+        <CardContent className="space-y-5">
           {loading ? (
             <div className="text-sm text-muted-foreground">Loading…</div>
           ) : filteredRows.length === 0 ? (
@@ -218,96 +241,107 @@ export default function Bookings() {
               }
             />
           ) : (
-            <div className="rounded-md border overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[90px]">ID</TableHead>
-                    <TableHead>Start</TableHead>
-                    <TableHead>End</TableHead>
-                    <TableHead className="w-[140px]">Status</TableHead>
-                    <TableHead className="w-[240px] text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
+            <div className="space-y-6">
+              {groupedDays.map((group) => (
+                <div key={group.dayKey} className="space-y-2">
+                  {/* day header */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="text-sm font-semibold">{group.label}</div>
+                      <Badge variant="secondary">{group.items.length}</Badge>
+                    </div>
+                    <div className="text-xs text-muted-foreground">{group.dayKey}</div>
+                  </div>
 
-                <TableBody>
-                  {filteredRows.map((b) => {
-                    const statusLabel = getDisplayStatus(b);
-                    const cancellable = isCancellable(b);
-                    const meta =
-                      String(b.status).toLowerCase() === "cancelled"
-                        ? "—"
-                        : isCompleted(b)
-                        ? "Completed"
-                        : isStarted(b)
-                        ? "Started"
-                        : "Upcoming";
+                  {/* events */}
+                  <div className="space-y-2">
+                    {group.items.map((b) => {
+                      const statusLabel = getDisplayStatus(b);
+                      const cancellable = isCancellable(b);
+                      const cancelling = busyCancelId === b.id;
 
-                    const cancelling = busyCancelId === b.id;
+                      const timeRange = `${fmtTime(b.start_at)} — ${fmtTime(b.end_at)}`;
+                      const duration = fmtDuration(b.start_at, b.end_at);
 
-                    return (
-                      <TableRow key={b.id} className="hover:bg-muted/40">
-                        <TableCell className="font-medium">#{b.id}</TableCell>
-                        <TableCell>{fmt(b.start_at)}</TableCell>
-                        <TableCell>{fmt(b.end_at)}</TableCell>
-                        <TableCell>
-                          <StatusBadge status={statusLabel} />
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="inline-flex items-center gap-2 justify-end">
-                            <Button asChild variant="outline" size="sm">
-                              <Link to={`/bookings/${b.id}`}>View</Link>
-                            </Button>
+                      return (
+                        <div
+                          key={b.id}
+                          className="group rounded-xl border bg-card px-4 py-3 transition hover:bg-muted/30 hover:border-border"
+                        >
+                          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                            {/* left: calendar event feel */}
+                            <button
+                              type="button"
+                              onClick={() => nav(`/bookings/${b.id}`)}
+                              className="text-left flex-1"
+                            >
+                              <div className="flex items-center gap-2">
+                                <div className="font-semibold">Booking #{b.id}</div>
+                                <StatusBadge status={statusLabel} />
+                              </div>
 
-                            {cancellable ? (
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button
-                                    variant="destructive"
-                                    size="sm"
-                                    disabled={busyCancelId !== null && !cancelling}
-                                  >
-                                    Cancel
-                                  </Button>
-                                </AlertDialogTrigger>
+                              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                                <span className="font-medium text-foreground">{timeRange}</span>
+                                <span>•</span>
+                                <span>{duration}</span>
+                              </div>
+                            </button>
 
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>
-                                      Cancel booking #{b.id}?
-                                    </AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      This will release all reserved inventory for this
-                                      booking. This action cannot be undone.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
+                            {/* right actions */}
+                            <div
+                              className="flex items-center gap-2 md:justify-end"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <Button asChild variant="outline" size="sm">
+                                <Link to={`/bookings/${b.id}`}>View</Link>
+                              </Button>
 
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel disabled={cancelling}>
-                                      Keep booking
-                                    </AlertDialogCancel>
-                                    <AlertDialogAction
-                                      onClick={() => onCancel(b.id)}
-                                      disabled={cancelling}
-                                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                              {cancellable ? (
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      variant="destructive"
+                                      size="sm"
+                                      disabled={busyCancelId !== null && !cancelling}
                                     >
-                                      {cancelling ? "Cancelling…" : "Confirm cancel"}
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">
-                                {meta}
-                              </span>
-                            )}
+                                      {cancelling ? "Cancelling…" : "Cancel"}
+                                    </Button>
+                                  </AlertDialogTrigger>
+
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>
+                                        Cancel booking #{b.id}?
+                                      </AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        This will release all reserved inventory for this booking.
+                                        This action cannot be undone.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel disabled={cancelling}>
+                                        Keep booking
+                                      </AlertDialogCancel>
+                                      <AlertDialogAction
+                                        onClick={() => onCancel(b.id)}
+                                        disabled={cancelling}
+                                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                      >
+                                        {cancelling ? "Cancelling…" : "Confirm cancel"}
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              ) : null}
+                            </div>
                           </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </CardContent>
@@ -316,7 +350,9 @@ export default function Bookings() {
   );
 }
 
-function StatCard({ label, value }) {
+/* ---------- UI helpers ---------- */
+
+function MiniStat({ label, value }) {
   return (
     <Card>
       <CardContent className="p-4">
@@ -350,19 +386,50 @@ function StatusBadge({ status }) {
   return <Badge variant="secondary">{status || "—"}</Badge>;
 }
 
-function fmt(iso) {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return String(iso);
+/* ---------- date helpers ---------- */
 
-  return d.toLocaleString("en-AU", {
+function dayKeyLocal(iso) {
+  if (!iso) return "Unknown";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "Unknown";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function dayLabelFromKey(key) {
+  if (!key || key === "Unknown") return "Unknown day";
+  const [y, m, d] = key.split("-").map(Number);
+  const dt = new Date(y, (m || 1) - 1, d || 1);
+  return dt.toLocaleDateString("en-AU", {
+    weekday: "long",
     day: "2-digit",
-    month: "2-digit",
+    month: "long",
     year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
   });
 }
+
+function fmtTime(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleTimeString("en-AU", { hour: "2-digit", minute: "2-digit" });
+}
+
+function fmtDuration(startIso, endIso) {
+  const a = new Date(startIso);
+  const b = new Date(endIso);
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return "—";
+
+  const mins = Math.max(0, Math.round((b.getTime() - a.getTime()) / 60000));
+  if (mins < 60) return `${mins}m`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m ? `${h}h ${m}m` : `${h}h`;
+}
+
+/* ---------- status helpers ---------- */
 
 function getDisplayStatus(b) {
   const raw = String(b?.status ?? "");
