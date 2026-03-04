@@ -3,6 +3,12 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { cancelBooking, getBooking, getPackingList } from "../api/bookings";
 
+import PageHeader from "../components/PageHeader";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+
 export default function BookingDetail() {
   const { id } = useParams();
   const bookingId = Number(id);
@@ -55,15 +61,23 @@ export default function BookingDetail() {
     }
   }
 
-  if (loading) return <div style={{ padding: 16 }}>Loading…</div>;
+  if (loading) {
+    return (
+      <div className="p-6">
+        <div className="text-sm text-muted-foreground">Loading…</div>
+      </div>
+    );
+  }
 
   if (err) {
     return (
-      <div style={{ padding: 16 }}>
-        <div style={{ color: "crimson" }}>{err}</div>
-        <div style={{ marginTop: 10 }}>
-          <Link to="/bookings">Back</Link>
+      <div className="p-6 space-y-3">
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+          {err}
         </div>
+        <Button asChild variant="outline" size="sm">
+          <Link to="/bookings">Back</Link>
+        </Button>
       </div>
     );
   }
@@ -73,116 +87,150 @@ export default function BookingDetail() {
   const cancellable = isCancellable(booking);
 
   return (
-    <div style={{ padding: 16, maxWidth: 900 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h2 style={{ margin: 0 }}>Booking #{booking?.id}</h2>
-        <Link to="/bookings">Back</Link>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title={`Booking #${booking?.id ?? bookingId}`}
+        description="View booking details, reserved items, and packing list."
+        right={
+          <Button asChild variant="outline">
+            <Link to="/bookings">Back</Link>
+          </Button>
+        }
+      />
 
-      <div style={{ marginTop: 12, border: "1px solid #eee", borderRadius: 8, padding: 12 }}>
-        <div>
-          <strong>Start (local):</strong> {fmt(booking?.start_at)}
-        </div>
-        <div>
-          <strong>End (local):</strong> {fmt(booking?.end_at)}
-        </div>
-
-        <div style={{ marginTop: 8 }}>
-          <strong>Status:</strong> {displayStatus}
-
-          {cancellable ? (
-            <>
-              {" "}
-              ·{" "}
-              <button onClick={onCancel} style={btnDanger}>
-                Cancel booking
-              </button>
-            </>
-          ) : (
-            <div style={{ marginTop: 8, color: "#777" }}>
-              {rawStatus === "cancelled"
-                ? "This booking is cancelled."
-                : isCompleted(booking)
-                  ? "This booking has ended and is marked as completed."
-                  : "This booking has already started, so it can’t be cancelled."}
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Booking details</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <div className="flex flex-wrap gap-x-2 gap-y-1">
+              <div className="text-muted-foreground">Start (local):</div>
+              <div className="font-medium">{fmt(booking?.start_at)}</div>
             </div>
-          )}
-        </div>
-      </div>
 
-      <div style={{ marginTop: 14 }}>
-        <h3 style={{ marginBottom: 8 }}>Reserved items</h3>
-        <ReservedItems booking={booking} />
-      </div>
+            <div className="flex flex-wrap gap-x-2 gap-y-1">
+              <div className="text-muted-foreground">End (local):</div>
+              <div className="font-medium">{fmt(booking?.end_at)}</div>
+            </div>
 
-      <div style={{ marginTop: 14 }}>
-        <h3 style={{ marginBottom: 8 }}>Packing list</h3>
-        <button onClick={onLoadPacking} disabled={packingLoading}>
-          {packingLoading ? "Loading…" : "Load packing list"}
-        </button>
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <div className="text-muted-foreground">Status:</div>
+              <StatusBadge status={displayStatus} />
+            </div>
 
-        {packing && (
-          <div style={{ marginTop: 10 }}>
-            <div style={{ border: "1px solid #eee", borderRadius: 8, padding: 12 }}>
-              <h4 style={{ marginTop: 0 }}>Packing checklist</h4>
+            <div className="pt-2">
+              {cancellable ? (
+                <Button variant="destructive" onClick={onCancel}>
+                  Cancel booking
+                </Button>
+              ) : (
+                <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+                  {rawStatus === "cancelled"
+                    ? "This booking is cancelled."
+                    : isCompleted(booking)
+                    ? "This booking has ended and is marked as completed."
+                    : "This booking has already started, so it can’t be cancelled."}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
-              <ul style={{ margin: 0, paddingLeft: 18 }}>
-                {(packing.packing_list || []).map((it) => (
-                  <li key={it.inventory_item_id}>
-                    <strong>{it.required_quantity}×</strong> {it.name}
-                  </li>
-                ))}
-              </ul>
+        <Card>
+          <CardHeader>
+            <CardTitle>Packing list</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Button onClick={onLoadPacking} disabled={packingLoading} className="w-full">
+              {packingLoading ? "Loading…" : "Load packing list"}
+            </Button>
 
-              <div style={{ marginTop: 12, color: "#333" }}>
-                <strong>Summary:</strong>{" "}
-                {packing.summary?.unique_items ?? (packing.packing_list || []).length} unique items ·{" "}
-                {packing.summary?.total_units ?? "—"} total units
+            {packing ? (
+              <div className="space-y-3">
+                <div className="text-sm font-medium">Packing checklist</div>
+
+                <ul className="text-sm text-muted-foreground list-disc pl-5 space-y-1">
+                  {(packing.packing_list || []).map((it) => (
+                    <li key={it.inventory_item_id}>
+                      <span className="font-medium text-foreground">
+                        {it.required_quantity}×
+                      </span>{" "}
+                      {it.name}
+                    </li>
+                  ))}
+                </ul>
+
+                <div className="text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground">Summary:</span>{" "}
+                  {packing.summary?.unique_items ?? (packing.packing_list || []).length} unique items ·{" "}
+                  {packing.summary?.total_units ?? "—"} total units
+                </div>
               </div>
-            </div>
-          </div>
-        )}
+            ) : (
+              <div className="text-sm text-muted-foreground">
+                Load to generate a packing checklist for this booking.
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Reserved items</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ReservedItems booking={booking} />
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
 function ReservedItems({ booking }) {
-  const reservations =
-    booking?.reservations ??
-    booking?.inventory_reservations ??
-    booking?.items ??
-    [];
+  const reservations = booking?.reservations ?? booking?.inventory_reservations ?? booking?.items ?? [];
 
   if (!Array.isArray(reservations) || reservations.length === 0) {
-    return <div style={{ color: "#666" }}>No reservation breakdown returned.</div>;
+    return <div className="text-sm text-muted-foreground">No reservation breakdown returned.</div>;
   }
 
   return (
-    <div style={{ overflowX: "auto" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr>
-            <th style={th}>Item</th>
-            <th style={th}>Qty</th>
-          </tr>
-        </thead>
-        <tbody>
+    <div className="rounded-md border overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Item</TableHead>
+            <TableHead className="w-[120px]">Qty</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {reservations.map((r, idx) => {
             const itemId = r.inventory_item_id ?? r.item_id ?? r.inventoryItemId;
             const qty = r.reserved_quantity ?? r.quantity ?? r.qty;
             const name = r.inventory_item?.name ?? r.item?.name ?? r.name;
+
             return (
-              <tr key={r.id ?? `${itemId}-${idx}`}>
-                <td style={td}>{name ? `${name} (#${itemId})` : `Item #${itemId}`}</td>
-                <td style={td}>{qty}</td>
-              </tr>
+              <TableRow key={r.id ?? `${itemId}-${idx}`}>
+                <TableCell className="font-medium">
+                  {name ? `${name} (#${itemId})` : `Item #${itemId}`}
+                </TableCell>
+                <TableCell>{qty}</TableCell>
+              </TableRow>
             );
           })}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
+}
+
+function StatusBadge({ status }) {
+  const s = String(status || "").toLowerCase();
+  if (s === "confirmed") return <Badge>Confirmed</Badge>;
+  if (s === "cancelled") return <Badge variant="destructive">Cancelled</Badge>;
+  if (s === "completed") return <Badge variant="secondary">Completed</Badge>;
+  return <Badge variant="secondary">{status || "—"}</Badge>;
 }
 
 function fmt(iso) {
@@ -233,15 +281,3 @@ function isCancellable(b) {
   if (isStarted(b)) return false; // matches your backend rule
   return true;
 }
-
-const th = { textAlign: "left", padding: "8px 6px", borderBottom: "1px solid #eee", fontSize: 13 };
-const td = { padding: "8px 6px", borderBottom: "1px solid #f3f3f3", fontSize: 14 };
-
-const btnDanger = {
-  marginLeft: 8,
-  background: "#ffecec",
-  border: "1px solid #f3b5b5",
-  borderRadius: 8,
-  padding: "6px 10px",
-  cursor: "pointer",
-};
