@@ -5,6 +5,12 @@ import { api } from "../api/client";
 import { createBooking, previewBookingAvailability } from "../api/bookings";
 import AvailabilityBreakdown from "../components/AvailabilityBreakdown";
 
+import PageHeader from "../components/PageHeader";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+
 export default function BookingNew() {
   const nav = useNavigate();
 
@@ -155,7 +161,9 @@ export default function BookingNew() {
     }
 
     // ✅ Frontend-side guard (backend also validates)
-    const invalidAddon = selectedAddons.find((a) => !a.addon_id || !Number.isFinite(a.quantity) || a.quantity < 1);
+    const invalidAddon = selectedAddons.find(
+      (a) => !a.addon_id || !Number.isFinite(a.quantity) || a.quantity < 1
+    );
     if (invalidAddon) {
       setErr("Addon quantities must be 1 or more.");
       return;
@@ -213,7 +221,6 @@ export default function BookingNew() {
 
       nav(newId ? `/bookings/${newId}` : "/bookings");
     } catch (e) {
-      // If backend returns 409 shortages, show a clean message
       const msg = e?.response?.data?.message ?? e?.message ?? "Create booking failed";
       setErr(msg);
     } finally {
@@ -222,145 +229,170 @@ export default function BookingNew() {
   }
 
   return (
-    <div style={{ padding: 16, maxWidth: 900 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h2 style={{ margin: 0 }}>New Booking</h2>
-        <Link to="/bookings">Back</Link>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="New booking"
+        description="Choose dates, a package, optional addons, then check availability before confirming."
+        right={
+          <Button asChild variant="outline">
+            <Link to="/bookings">Back</Link>
+          </Button>
+        }
+      />
 
-      <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <div>
-          <label>Start</label>
-          <input
-            type="datetime-local"
-            value={startLocal}
-            onChange={(e) => setStartLocal(e.target.value)}
-            style={input}
-          />
-        </div>
-        <div>
-          <label>End</label>
-          <input
-            type="datetime-local"
-            value={endLocal}
-            onChange={(e) => setEndLocal(e.target.value)}
-            style={input}
-          />
-        </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Booking details</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="start">Start</Label>
+              <Input
+                id="start"
+                type="datetime-local"
+                value={startLocal}
+                onChange={(e) => setStartLocal(e.target.value)}
+              />
+            </div>
 
-        <div style={{ gridColumn: "1 / -1" }}>
-          <label>Package</label>
-          <select
-            value={packageId}
-            onChange={(e) => setPackageId(e.target.value)}
-            style={input}
-            disabled={loadingPkgs}
-          >
-            <option value="">Select a package…</option>
-            {packages
-              .filter((p) => p.is_active !== false)
-              .map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} (#{p.id})
-                </option>
-              ))}
-          </select>
-        </div>
-      </div>
+            <div className="space-y-2">
+              <Label htmlFor="end">End</Label>
+              <Input
+                id="end"
+                type="datetime-local"
+                value={endLocal}
+                onChange={(e) => setEndLocal(e.target.value)}
+              />
+            </div>
 
-      <div style={{ marginTop: 10, color: "#666", fontSize: 13 }}>
-        Loaded package requirements: <strong>{items.length}</strong> item(s)
-      </div>
-
-      {/* ✅ Addons section */}
-      <div style={{ marginTop: 14, border: "1px solid #ddd", padding: 12, borderRadius: 8 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-          <h3 style={{ margin: 0 }}>Addons</h3>
-          <button type="button" onClick={() => { fetchAddons?.(); }} disabled={loadingAddons} style={{ display: "none" }}>
-            Refresh
-          </button>
-        </div>
-
-        {addonsErr && <div style={{ color: "crimson", marginTop: 8 }}>{addonsErr}</div>}
-
-        {loadingAddons ? (
-          <div style={{ marginTop: 8 }}>Loading addons…</div>
-        ) : addons.length === 0 ? (
-          <div style={{ marginTop: 8, color: "#666" }}>No addons available.</div>
-        ) : (
-          <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
-            {addons.map((a) => {
-              const selected = selectedAddons.find((x) => x.addon_id === a.id);
-              return (
-                <div
-                  key={a.id}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "28px 1fr 120px",
-                    gap: 10,
-                    alignItems: "center",
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={!!selected}
-                    onChange={(e) => toggleAddon(a.id, e.target.checked)}
-                  />
-
-                  <div>
-                    <div style={{ fontWeight: 600 }}>
-                      {a.name}{" "}
-                      <span style={{ fontWeight: 400, color: "#666" }}>
-                        ({a.pricing_type} • ${(Number(a.price_cents || 0) / 100).toFixed(2)})
-                      </span>
-                    </div>
-                    {a.description && <div style={{ color: "#666", fontSize: 13 }}>{a.description}</div>}
-                  </div>
-
-                  <input
-                    type="number"
-                    min={1}
-                    disabled={!selected}
-                    value={selected ? selected.quantity : 1}
-                    onChange={(e) => setAddonQty(a.id, e.target.value)}
-                    style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #ddd" }}
-                  />
-                </div>
-              );
-            })}
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="pkg">Package</Label>
+              <select
+                id="pkg"
+                value={packageId}
+                onChange={(e) => setPackageId(e.target.value)}
+                disabled={loadingPkgs}
+                className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="">Select a package…</option>
+                {packages
+                  .filter((p) => p.is_active !== false)
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} (#{p.id})
+                    </option>
+                  ))}
+              </select>
+              <div className="text-xs text-muted-foreground">
+                Loaded package requirements: <span className="font-medium text-foreground">{items.length}</span>{" "}
+                item(s)
+              </div>
+            </div>
           </div>
-        )}
+        </CardContent>
+      </Card>
 
-        <div style={{ marginTop: 10, color: "#666", fontSize: 13 }}>
-          Selected addons: <strong>{selectedAddons.length}</strong>
+      <Card>
+        <CardHeader>
+          <CardTitle>Addons</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {addonsErr ? (
+            <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+              {addonsErr}
+            </div>
+          ) : null}
+
+          {loadingAddons ? (
+            <div className="text-sm text-muted-foreground">Loading addons…</div>
+          ) : addons.length === 0 ? (
+            <div className="text-sm text-muted-foreground">No addons available.</div>
+          ) : (
+            <div className="space-y-2">
+              {addons.map((a) => {
+                const selected = selectedAddons.find((x) => x.addon_id === a.id);
+                const price = (Number(a.price_cents || 0) / 100).toFixed(2);
+
+                return (
+                  <div
+                    key={a.id}
+                    className="rounded-md border p-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between"
+                  >
+                    <label className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        className="mt-1"
+                        checked={!!selected}
+                        onChange={(e) => toggleAddon(a.id, e.target.checked)}
+                      />
+                      <div>
+                        <div className="font-medium">
+                          {a.name}{" "}
+                          <span className="font-normal text-muted-foreground">
+                            ({a.pricing_type} • ${price})
+                          </span>
+                        </div>
+                        {a.description ? (
+                          <div className="text-sm text-muted-foreground">{a.description}</div>
+                        ) : null}
+                      </div>
+                    </label>
+
+                    <div className="flex items-center gap-2 md:justify-end">
+                      <Label className="text-xs text-muted-foreground">Qty</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        className="w-24"
+                        disabled={!selected}
+                        value={selected ? selected.quantity : 1}
+                        onChange={(e) => setAddonQty(a.id, e.target.value)}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="text-xs text-muted-foreground">
+            Selected addons:{" "}
+            <span className="font-medium text-foreground">{selectedAddons.length}</span>
+          </div>
+        </CardContent>
+      </Card>
+
+      {err ? (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+          {err}
         </div>
-      </div>
+      ) : null}
 
-      <div style={{ marginTop: 14, display: "flex", gap: 10 }}>
-        <button onClick={onCheck} disabled={!canCheck || checking}>
+      <div className="flex flex-wrap gap-2">
+        <Button onClick={onCheck} disabled={!canCheck || checking} variant="outline">
           {checking ? "Checking…" : "Check availability"}
-        </button>
+        </Button>
 
-        <button onClick={onCreate} disabled={!preview?.available || creating} title={!preview ? "Run check first" : ""}>
+        <Button
+          onClick={onCreate}
+          disabled={!preview?.available || creating}
+          title={!preview ? "Run check first" : ""}
+        >
           {creating ? "Creating…" : "Confirm booking"}
-        </button>
+        </Button>
       </div>
 
-      {err && <div style={{ marginTop: 10, color: "crimson" }}>{err}</div>}
-
-      {preview && (
-        <div style={{ marginTop: 14 }}>
-          <AvailabilityBreakdown result={preview} />
-        </div>
-      )}
+      {preview ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Availability breakdown</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <AvailabilityBreakdown result={preview} />
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }
-
-const input = {
-  width: "100%",
-  padding: "10px 12px",
-  borderRadius: 8,
-  border: "1px solid #ddd",
-  marginTop: 6,
-};
