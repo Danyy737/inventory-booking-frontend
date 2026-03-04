@@ -1,5 +1,5 @@
 // src/pages/BookingDetail.jsx
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { cancelBooking, getBooking, getPackingList } from "../api/bookings";
 import { toast } from "sonner";
@@ -29,6 +29,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
+import { Calendar, Clock, Package, ListChecks, RefreshCw } from "lucide-react";
+
 export default function BookingDetail() {
   const { id } = useParams();
   const bookingId = Number(id);
@@ -42,6 +44,9 @@ export default function BookingDetail() {
   const [packingLoading, setPackingLoading] = useState(false);
   const [packing, setPacking] = useState(null);
 
+  // local checklist state (frontend-only)
+  const [checked, setChecked] = useState({});
+
   async function load({ silent = false } = {}) {
     if (!silent) setErr("");
     setLoading(true);
@@ -49,8 +54,7 @@ export default function BookingDetail() {
       const data = await getBooking(bookingId);
       setBooking(data);
     } catch (e) {
-      const msg =
-        e?.response?.data?.message ?? e?.message ?? "Failed to load booking";
+      const msg = e?.response?.data?.message ?? e?.message ?? "Failed to load booking";
       setErr(msg);
       toast.error(msg);
     } finally {
@@ -85,17 +89,70 @@ export default function BookingDetail() {
     try {
       const data = await getPackingList(bookingId);
       setPacking(data);
+      setChecked({}); // reset checklist when loading fresh list
       toast.success("Packing list loaded");
     } catch (e) {
-      const msg =
-        e?.response?.data?.message ??
-        e?.message ??
-        "Failed to load packing list";
+      const msg = e?.response?.data?.message ?? e?.message ?? "Failed to load packing list";
       toast.error(msg);
     } finally {
       setPackingLoading(false);
     }
   }
+
+  const displayStatus = getDisplayStatus(booking);
+  const cancellable = isCancellable(booking);
+  const rawStatus = String(booking?.status || "").toLowerCase();
+
+  const reservations = useMemo(() => {
+    const r =
+      booking?.reservations ??
+      booking?.inventory_reservations ??
+      booking?.items ??
+      [];
+    return Array.isArray(r) ? r : [];
+  }, [booking]);
+
+  const reservedTotals = useMemo(() => {
+    let totalUnits = 0;
+    const uniqueIds = new Set();
+
+    for (const r of reservations) {
+      const itemId = r.inventory_item_id ?? r.item_id ?? r.inventoryItemId;
+      const qty = Number(r.reserved_quantity ?? r.quantity ?? r.qty ?? 0);
+      if (itemId != null) uniqueIds.add(String(itemId));
+      if (Number.isFinite(qty)) totalUnits += qty;
+    }
+
+    return { totalUnits, uniqueItems: uniqueIds.size };
+  }, [reservations]);
+
+  const durationLabel = useMemo(() => {
+    const start = booking?.start_at ? new Date(booking.start_at) : null;
+    const end = booking?.end_at ? new Date(booking.end_at) : null;
+    if (!start || !end) return "—";
+    const ms = end.getTime() - start.getTime();
+    if (!Number.isFinite(ms) || ms <= 0) return "—";
+    const mins = Math.round(ms / 60000);
+    const hours = Math.floor(mins / 60);
+    const rem = mins % 60;
+    if (hours <= 0) return `${mins}m`;
+    if (rem === 0) return `${hours}h`;
+    return `${hours}h ${rem}m`;
+  }, [booking?.start_at, booking?.end_at]);
+
+  // addons: support common shapes safely
+  const addons = useMemo(() => {
+    const a = booking?.addons ?? booking?.booking_addons ?? booking?.add_ons ?? [];
+    return Array.isArray(a) ? a : [];
+  }, [booking]);
+
+  // packing summary
+  const packingSummary = useMemo(() => {
+    const list = packing?.packing_list ?? [];
+    const unique = packing?.summary?.unique_items ?? (Array.isArray(list) ? list.length : 0);
+    const units = packing?.summary?.total_units ?? "—";
+    return { unique, units };
+  }, [packing]);
 
   if (loading) {
     return (
@@ -118,44 +175,89 @@ export default function BookingDetail() {
     );
   }
 
-  const rawStatus = String(booking?.status || "").toLowerCase();
-  const displayStatus = getDisplayStatus(booking);
-  const cancellable = isCancellable(booking);
-
   return (
     <div className="space-y-6">
       <PageHeader
         title={`Booking #${booking?.id ?? bookingId}`}
-        description="View booking details, reserved items, and packing list."
+        description="View booking details, reserved items, addons, and packing list."
         right={
-          <Button asChild variant="outline">
-            <Link to="/bookings">Back</Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => load()} disabled={loading}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
+            <Button asChild variant="outline">
+              <Link to="/bookings">Back</Link>
+            </Button>
+          </div>
         }
       />
 
+      {/* Top stats */}
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <MiniStat title="Status" value={<StatusBadge status={displayStatus} />} Icon={Package} />
+        <MiniStat title="Duration" value={durationLabel} Icon={Clock} />
+        <MiniStat title="Reserved units" value={reservedTotals.totalUnits} Icon={ListChecks} />
+        <MiniStat title="Unique items" value={reservedTotals.uniqueItems} Icon={Calendar} />
+      </div>
+
       <div className="grid gap-4 lg:grid-cols-3">
+        {/* Details */}
         <Card className="lg:col-span-2">
-          <CardHeader>
+          <CardHeader className="space-y-1">
             <CardTitle>Booking details</CardTitle>
+            <div className="text-sm text-muted-foreground">
+              Start and end times are shown in your local timezone.
+            </div>
           </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <div className="flex flex-wrap gap-x-2 gap-y-1">
-              <div className="text-muted-foreground">Start (local):</div>
-              <div className="font-medium">{fmt(booking?.start_at)}</div>
+
+          <CardContent className="space-y-4 text-sm">
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-xl border bg-muted/20 p-4">
+                <div className="text-xs text-muted-foreground">Start</div>
+                <div className="mt-1 font-medium">{fmt(booking?.start_at)}</div>
+              </div>
+              <div className="rounded-xl border bg-muted/20 p-4">
+                <div className="text-xs text-muted-foreground">End</div>
+                <div className="mt-1 font-medium">{fmt(booking?.end_at)}</div>
+              </div>
             </div>
 
-            <div className="flex flex-wrap gap-x-2 gap-y-1">
-              <div className="text-muted-foreground">End (local):</div>
-              <div className="font-medium">{fmt(booking?.end_at)}</div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 pt-1">
+            <div className="flex flex-wrap items-center gap-2">
               <div className="text-muted-foreground">Status:</div>
               <StatusBadge status={displayStatus} />
             </div>
 
-            <div className="pt-2">
+            {/* Addons (optional) */}
+            {addons.length > 0 ? (
+              <div className="rounded-xl border p-4">
+                <div className="font-medium">Addons</div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  Addons attached to this booking (if your API returns them).
+                </div>
+
+                <div className="mt-3 space-y-2">
+                  {addons.map((a, idx) => {
+                    const name = a?.name ?? a?.addon?.name ?? "Addon";
+                    const qty = a?.quantity ?? a?.qty ?? 1;
+                    const id = a?.id ?? a?.addon_id ?? a?.addon?.id ?? idx;
+
+                    return (
+                      <div
+                        key={id}
+                        className="flex items-center justify-between rounded-lg border bg-muted/20 px-3 py-2"
+                      >
+                        <div className="font-medium">{name}</div>
+                        <Badge variant="secondary">Qty {qty}</Badge>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+
+            {/* Cancel area */}
+            <div>
               {cancellable ? (
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
@@ -202,39 +304,74 @@ export default function BookingDetail() {
           </CardContent>
         </Card>
 
+        {/* Packing list */}
         <Card>
-          <CardHeader>
+          <CardHeader className="space-y-1">
             <CardTitle>Packing list</CardTitle>
+            <div className="text-sm text-muted-foreground">
+              Generate a checklist for pickup / dispatch.
+            </div>
           </CardHeader>
+
           <CardContent className="space-y-3">
             <Button
               onClick={onLoadPacking}
               disabled={packingLoading}
               className="w-full"
+              variant={packing ? "outline" : "default"}
             >
-              {packingLoading ? "Loading…" : "Load packing list"}
+              {packingLoading ? "Loading…" : packing ? "Refresh packing list" : "Load packing list"}
             </Button>
 
             {packing ? (
               <div className="space-y-3">
-                <div className="text-sm font-medium">Packing checklist</div>
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-medium">Checklist</div>
+                  <Badge variant="secondary">
+                    {packingSummary.unique} items
+                  </Badge>
+                </div>
 
-                <ul className="text-sm text-muted-foreground list-disc pl-5 space-y-1">
-                  {(packing.packing_list || []).map((it) => (
-                    <li key={it.inventory_item_id}>
-                      <span className="font-medium text-foreground">
-                        {it.required_quantity}×
-                      </span>{" "}
-                      {it.name}
-                    </li>
-                  ))}
-                </ul>
+                <div className="space-y-2">
+                  {(packing.packing_list || []).map((it) => {
+                    const key = String(it.inventory_item_id);
+                    const done = Boolean(checked[key]);
+
+                    return (
+                      <label
+                        key={it.inventory_item_id}
+                        className="flex items-start gap-3 rounded-lg border bg-muted/10 px-3 py-2 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          className="mt-1"
+                          checked={done}
+                          onChange={(e) =>
+                            setChecked((prev) => ({
+                              ...prev,
+                              [key]: e.target.checked,
+                            }))
+                          }
+                        />
+                        <div className="flex-1">
+                          <div className={done ? "line-through opacity-70" : "font-medium"}>
+                            {it.name}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            Qty: <span className="font-medium text-foreground">{it.required_quantity}</span>
+                          </div>
+                        </div>
+                        <Badge variant={done ? "default" : "secondary"}>
+                          {it.required_quantity}×
+                        </Badge>
+                      </label>
+                    );
+                  })}
+                </div>
 
                 <div className="text-xs text-muted-foreground">
                   <span className="font-medium text-foreground">Summary:</span>{" "}
-                  {packing.summary?.unique_items ??
-                    (packing.packing_list || []).length}{" "}
-                  unique items · {packing.summary?.total_units ?? "—"} total units
+                  {packingSummary.unique} unique items · {packingSummary.units} total units
                 </div>
               </div>
             ) : (
@@ -246,25 +383,20 @@ export default function BookingDetail() {
         </Card>
       </div>
 
+      {/* Reserved items */}
       <Card>
         <CardHeader>
           <CardTitle>Reserved items</CardTitle>
         </CardHeader>
         <CardContent>
-          <ReservedItems booking={booking} />
+          <ReservedItems reservations={reservations} />
         </CardContent>
       </Card>
     </div>
   );
 }
 
-function ReservedItems({ booking }) {
-  const reservations =
-    booking?.reservations ??
-    booking?.inventory_reservations ??
-    booking?.items ??
-    [];
-
+function ReservedItems({ reservations }) {
   if (!Array.isArray(reservations) || reservations.length === 0) {
     return (
       <div className="text-sm text-muted-foreground">
@@ -289,7 +421,7 @@ function ReservedItems({ booking }) {
             const name = r.inventory_item?.name ?? r.item?.name ?? r.name;
 
             return (
-              <TableRow key={r.id ?? `${itemId}-${idx}`}>
+              <TableRow key={r.id ?? `${itemId}-${idx}`} className="hover:bg-muted/40">
                 <TableCell className="font-medium">
                   {name ? `${name} (#${itemId})` : `Item #${itemId}`}
                 </TableCell>
@@ -300,6 +432,26 @@ function ReservedItems({ booking }) {
         </TableBody>
       </Table>
     </div>
+  );
+}
+
+function MiniStat({ title, value, Icon }) {
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-xs text-muted-foreground">{title}</div>
+            <div className="mt-1 text-2xl font-semibold">
+              {typeof value === "string" || typeof value === "number" ? value : value}
+            </div>
+          </div>
+          <div className="h-9 w-9 rounded-xl border bg-muted/40 flex items-center justify-center">
+            <Icon className="h-4 w-4 opacity-80" />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
