@@ -2,13 +2,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { cancelBooking, listBookings } from "../api/bookings";
+import { toast } from "sonner";
 
 import PageHeader from "../components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
 
 import {
@@ -39,8 +47,8 @@ export default function Bookings() {
   const [filter, setFilter] = useState("upcoming");
   const [q, setQ] = useState(""); // id search
 
-  async function load() {
-    setErr("");
+  async function load({ silent = false } = {}) {
+    if (!silent) setErr("");
     setLoading(true);
     try {
       const data = await listBookings();
@@ -58,7 +66,10 @@ export default function Bookings() {
 
       setRows(sorted);
     } catch (e) {
-      setErr(e?.response?.data?.message ?? e?.message ?? "Failed to load bookings");
+      const msg =
+        e?.response?.data?.message ?? e?.message ?? "Failed to load bookings";
+      setErr(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -69,13 +80,16 @@ export default function Bookings() {
   }, []);
 
   async function onCancel(id) {
+    if (busyCancelId) return; // prevent double cancel spam
 
     setBusyCancelId(id);
     try {
       await cancelBooking(id);
-      await load();
+      toast.success(`Booking #${id} cancelled`);
+      await load({ silent: true });
     } catch (e) {
-      alert(e?.response?.data?.message ?? e?.message ?? "Cancel failed");
+      const msg = e?.response?.data?.message ?? e?.message ?? "Cancel failed";
+      toast.error(msg);
     } finally {
       setBusyCancelId(null);
     }
@@ -99,16 +113,18 @@ export default function Bookings() {
   const filteredRows = useMemo(() => {
     let out = rows;
 
-    // filter bucket
     if (filter === "upcoming") {
-      out = out.filter((b) => String(b?.status ?? "").toLowerCase() !== "cancelled" && !isCompleted(b));
+      out = out.filter(
+        (b) => String(b?.status ?? "").toLowerCase() !== "cancelled" && !isCompleted(b)
+      );
     } else if (filter === "completed") {
-      out = out.filter((b) => String(b?.status ?? "").toLowerCase() !== "cancelled" && isCompleted(b));
+      out = out.filter(
+        (b) => String(b?.status ?? "").toLowerCase() !== "cancelled" && isCompleted(b)
+      );
     } else if (filter === "cancelled") {
       out = out.filter((b) => String(b?.status ?? "").toLowerCase() === "cancelled");
     }
 
-    // id search
     const query = q.trim();
     if (query) out = out.filter((b) => String(b.id).includes(query));
 
@@ -122,7 +138,7 @@ export default function Bookings() {
         description="Create and manage bookings. Cancelling is blocked once a booking has started."
         right={
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={load} disabled={loading}>
+            <Button variant="outline" onClick={() => load()} disabled={loading}>
               Refresh
             </Button>
             <Button asChild>
@@ -132,7 +148,6 @@ export default function Bookings() {
         }
       />
 
-      {/* Insight cards */}
       <div className="grid gap-3 md:grid-cols-4">
         <StatCard label="Total" value={counts.total} />
         <StatCard label="Upcoming" value={counts.upcoming} />
@@ -161,7 +176,6 @@ export default function Bookings() {
             </div>
           </div>
 
-          {/* Filter tabs */}
           <div className="flex flex-wrap gap-2">
             {FILTERS.map((f) => (
               <Button
@@ -246,35 +260,46 @@ export default function Bookings() {
                             </Button>
 
                             {cancellable ? (
-  <AlertDialog>
-    <AlertDialogTrigger asChild>
-      <Button variant="destructive" size="sm">
-        Cancel
-      </Button>
-    </AlertDialogTrigger>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    disabled={busyCancelId !== null && !cancelling}
+                                  >
+                                    Cancel
+                                  </Button>
+                                </AlertDialogTrigger>
 
-    <AlertDialogContent>
-      <AlertDialogHeader>
-        <AlertDialogTitle>Cancel booking #{b.id}?</AlertDialogTitle>
-        <AlertDialogDescription>
-          This will release all reserved inventory for this booking.
-          This action cannot be undone.
-        </AlertDialogDescription>
-      </AlertDialogHeader>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>
+                                      Cancel booking #{b.id}?
+                                    </AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      This will release all reserved inventory for this
+                                      booking. This action cannot be undone.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
 
-      <AlertDialogFooter>
-        <AlertDialogCancel>Keep booking</AlertDialogCancel>
-        <AlertDialogAction
-          onClick={() => onCancel(b.id)}
-          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-        >
-          Confirm cancel
-        </AlertDialogAction>
-      </AlertDialogFooter>
-    </AlertDialogContent>
-  </AlertDialog>
-) : (
-                              <span className="text-xs text-muted-foreground">{meta}</span>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel disabled={cancelling}>
+                                      Keep booking
+                                    </AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() => onCancel(b.id)}
+                                      disabled={cancelling}
+                                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                    >
+                                      {cancelling ? "Cancelling…" : "Confirm cancel"}
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                {meta}
+                              </span>
                             )}
                           </div>
                         </TableCell>

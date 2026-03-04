@@ -2,13 +2,33 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
+import { toast } from "sonner";
 
 import PageHeader from "../components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 function formatCents(cents) {
   const dollars = (Number(cents || 0) / 100).toFixed(2);
@@ -21,28 +41,37 @@ export default function Addons() {
   const [err, setErr] = useState("");
   const [q, setQ] = useState("");
 
-  async function fetchAddons() {
-    setErr("");
+  const [deletingId, setDeletingId] = useState(null);
+
+  async function fetchAddons({ silent = false } = {}) {
+    if (!silent) setErr("");
     setLoading(true);
     try {
       const res = await api.get("/addons");
       setAddons(res.data?.data ?? []);
     } catch (e) {
-      setErr(e?.response?.data?.message ?? "Failed to load addons.");
+      const msg = e?.response?.data?.message ?? "Failed to load addons.";
+      setErr(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
   }
 
   async function deleteAddon(id) {
-    const ok = window.confirm("Delete this addon? This cannot be undone.");
-    if (!ok) return;
+    if (deletingId) return;
 
+    setDeletingId(id);
     try {
       await api.delete(`/addons/${id}`);
       setAddons((prev) => prev.filter((a) => a.id !== id));
+      toast.success("Addon deleted");
     } catch (e) {
-      alert(e?.response?.data?.message ?? "Failed to delete addon.");
+      const msg = e?.response?.data?.message ?? "Failed to delete addon.";
+      setErr(msg);
+      toast.error(msg);
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -76,7 +105,7 @@ export default function Addons() {
         description="Create optional add-ons that reserve inventory and add extra pricing to bookings."
         right={
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={fetchAddons}>
+            <Button variant="outline" onClick={() => fetchAddons()} disabled={!!deletingId}>
               Refresh
             </Button>
             <Button asChild>
@@ -86,6 +115,7 @@ export default function Addons() {
         }
       />
 
+      {/* Fallback inline error; toasts are primary */}
       {err ? (
         <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
           {err}
@@ -94,9 +124,17 @@ export default function Addons() {
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-4">
-          <CardTitle>All addons</CardTitle>
+          <div className="flex items-center gap-3">
+            <CardTitle>All addons</CardTitle>
+            <Badge variant="secondary">{addons.length}</Badge>
+          </div>
+
           <div className="w-full max-w-xs">
-            <Input placeholder="Search addons…" value={q} onChange={(e) => setQ(e.target.value)} />
+            <Input
+              placeholder="Search addons…"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
           </div>
         </CardHeader>
 
@@ -114,62 +152,93 @@ export default function Addons() {
                     <TableHead>Status</TableHead>
                     <TableHead>Pricing</TableHead>
                     <TableHead className="text-right w-[110px]">Items</TableHead>
-                    <TableHead className="text-right w-[220px]">Actions</TableHead>
+                    <TableHead className="text-right w-[240px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
 
                 <TableBody>
-                  {filtered.map((a) => (
-                    <TableRow key={a.id}>
-                      <TableCell>
-                        <div className="font-medium">{a.name}</div>
-                        <div className="text-xs text-muted-foreground line-clamp-1">
-                          {a.description || "—"}
-                        </div>
-                        <div className="text-xs text-muted-foreground">#{a.id}</div>
-                      </TableCell>
+                  {filtered.map((a) => {
+                    const isDeleting = deletingId === a.id;
 
-                      <TableCell>
-                        <Badge variant={a.is_active ? "default" : "secondary"}>
-                          {a.is_active ? "Active" : "Inactive"}
-                        </Badge>
-                      </TableCell>
+                    return (
+                      <TableRow key={a.id}>
+                        <TableCell>
+                          <div className="font-medium">{a.name}</div>
+                          <div className="text-xs text-muted-foreground line-clamp-1">
+                            {a.description || "—"}
+                          </div>
+                          <div className="text-xs text-muted-foreground">#{a.id}</div>
+                        </TableCell>
 
-                      <TableCell>
-                        <div className="text-sm">
-                          <span className="font-medium">{a.pricing_type}</span>{" "}
-                          <span className="text-muted-foreground">• {formatCents(a.price_cents)}</span>
-                        </div>
-                      </TableCell>
+                        <TableCell>
+                          <Badge variant={a.is_active ? "default" : "secondary"}>
+                            {a.is_active ? "Active" : "Inactive"}
+                          </Badge>
+                        </TableCell>
 
-                      <TableCell className="text-right">
-                        {(a.items ?? []).length}
-                      </TableCell>
+                        <TableCell>
+                          <div className="text-sm">
+                            <span className="font-medium">{a.pricing_type}</span>{" "}
+                            <span className="text-muted-foreground">
+                              • {formatCents(a.price_cents)}
+                            </span>
+                          </div>
+                        </TableCell>
 
-                      <TableCell className="text-right">
-                        <div className="inline-flex items-center gap-2 justify-end">
-                          <Button asChild size="sm" variant="outline">
-                            <Link to={`/addons/${a.id}/edit`}>Edit</Link>
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => deleteAddon(a.id)}
-                          >
-                            Delete
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        <TableCell className="text-right">{(a.items ?? []).length}</TableCell>
+
+                        <TableCell className="text-right">
+                          <div className="inline-flex items-center gap-2 justify-end">
+                            <Button asChild size="sm" variant="outline" disabled={!!deletingId}>
+                              <Link to={`/addons/${a.id}/edit`}>Edit</Link>
+                            </Button>
+
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  disabled={!!deletingId}
+                                >
+                                  {isDeleting ? "Deleting…" : "Delete"}
+                                </Button>
+                              </AlertDialogTrigger>
+
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>
+                                    Delete “{a.name}”?
+                                  </AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This cannot be undone.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel disabled={isDeleting}>
+                                    Cancel
+                                  </AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => deleteAddon(a.id)}
+                                    disabled={isDeleting}
+                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                  >
+                                    {isDeleting ? "Deleting…" : "Confirm delete"}
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
           )}
         </CardContent>
       </Card>
-
-      {/* Optional: quick expandable detail blocks (keep it simple, table is enough) */}
     </div>
   );
 }

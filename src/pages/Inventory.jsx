@@ -1,12 +1,32 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
+import { toast } from "sonner";
 
 import PageHeader from "../components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 export default function Inventory() {
   const [items, setItems] = useState([]);
@@ -28,8 +48,13 @@ export default function Inventory() {
   const [editSku, setEditSku] = useState("");
   const [editQuantity, setEditQuantity] = useState(0);
 
+  // Row delete loading
+  const [deletingId, setDeletingId] = useState(null);
+
   const sortedItems = useMemo(() => {
-    const base = [...items].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    const base = [...items].sort((a, b) =>
+      (a.name || "").localeCompare(b.name || "")
+    );
     const query = q.trim().toLowerCase();
     if (!query) return base;
     return base.filter((it) => {
@@ -40,15 +65,18 @@ export default function Inventory() {
     });
   }, [items, q]);
 
-  async function fetchItems() {
-    setErr("");
+  async function fetchItems({ silent = false } = {}) {
+    if (!silent) setErr("");
     setLoading(true);
     try {
       const res = await api.get("/inventory/items");
       const payload = res?.data?.data ?? res?.data ?? [];
       setItems(Array.isArray(payload) ? payload : []);
     } catch (e) {
-      setErr(e?.response?.data?.message || "Failed to load inventory items.");
+      const msg =
+        e?.response?.data?.message || "Failed to load inventory items.";
+      setErr(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -61,36 +89,49 @@ export default function Inventory() {
   async function createItem(e) {
     e.preventDefault();
     setErr("");
+
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setErr("Name is required.");
+      toast.error("Name is required");
+      return;
+    }
+
     setSaving(true);
     try {
       const res = await api.post("/inventory/items", {
-        name,
+        name: trimmed,
         sku: sku || null,
         total_quantity: Number(quantity),
       });
 
       const created = res?.data?.data ?? res?.data;
+      toast.success("Item created");
+
       if (created && created.id) {
         setItems((prev) => [created, ...prev]);
       } else {
-        await fetchItems();
+        await fetchItems({ silent: true });
       }
 
       setName("");
       setSku("");
       setQuantity(0);
     } catch (e) {
-      setErr(e?.response?.data?.message || "Failed to create item.");
+      const msg = e?.response?.data?.message || "Failed to create item.";
+      setErr(msg);
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
   }
 
   function startEdit(item) {
+    setErr("");
     setEditingId(item.id);
     setEditName(item.name ?? "");
     setEditSku(item.sku ?? "");
-    setEditQuantity(Number(item?.stock?.total_quantity ?? 0)); // ✅ FIX
+    setEditQuantity(Number(item?.stock?.total_quantity ?? 0));
   }
 
   function cancelEdit() {
@@ -102,27 +143,33 @@ export default function Inventory() {
 
   async function saveEdit(id) {
     setErr("");
+
+    const trimmed = editName.trim();
+    if (!trimmed) {
+      setErr("Name is required.");
+      toast.error("Name is required");
+      return;
+    }
+
     setSaving(true);
     try {
       const res = await api.patch(`/inventory/items/${id}`, {
-        name: editName,
+        name: trimmed,
         sku: editSku || null,
         total_quantity: Number(editQuantity),
       });
 
-      // ✅ Use backend response as source of truth
       const updated = res?.data?.data ?? res?.data;
 
       if (updated && updated.id) {
         setItems((prev) => prev.map((it) => (it.id === id ? updated : it)));
       } else {
-        // fallback if response is unexpected
         setItems((prev) =>
           prev.map((it) =>
             it.id === id
               ? {
                   ...it,
-                  name: editName,
+                  name: trimmed,
                   sku: editSku || null,
                   stock: {
                     ...(it.stock ?? {}),
@@ -134,27 +181,34 @@ export default function Inventory() {
         );
       }
 
+      toast.success("Item updated");
       cancelEdit();
     } catch (e) {
-      setErr(e?.response?.data?.message || "Failed to update item.");
+      const msg = e?.response?.data?.message || "Failed to update item.";
+      setErr(msg);
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
   }
 
   async function deleteItem(id) {
-    const ok = window.confirm("Delete this item? This cannot be undone.");
-    if (!ok) return;
-
     setErr("");
-    setSaving(true);
+    setDeletingId(id);
+
     try {
       await api.delete(`/inventory/items/${id}`);
       setItems((prev) => prev.filter((it) => it.id !== id));
+      toast.success("Item deleted");
+      if (editingId === id) cancelEdit();
     } catch (e) {
-      setErr(e?.response?.data?.message || "Failed to delete item. It may be referenced by a package.");
+      const msg =
+        e?.response?.data?.message ||
+        "Failed to delete item. It may be referenced by a package.";
+      setErr(msg);
+      toast.error(msg);
     } finally {
-      setSaving(false);
+      setDeletingId(null);
     }
   }
 
@@ -165,13 +219,18 @@ export default function Inventory() {
         description="Create, edit, and manage your inventory items."
         right={
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={fetchItems} disabled={loading || saving}>
+            <Button
+              variant="outline"
+              onClick={() => fetchItems()}
+              disabled={loading || saving}
+            >
               Refresh
             </Button>
           </div>
         }
       />
 
+      {/* Keep as fallback; toasts are primary */}
       {err ? (
         <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
           {err}
@@ -191,6 +250,7 @@ export default function Inventory() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
+                disabled={saving}
               />
             </div>
 
@@ -200,6 +260,7 @@ export default function Inventory() {
                 placeholder="e.g. CHAIR-001"
                 value={sku}
                 onChange={(e) => setSku(e.target.value)}
+                disabled={saving}
               />
             </div>
 
@@ -211,6 +272,7 @@ export default function Inventory() {
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
                 required
+                disabled={saving}
               />
             </div>
 
@@ -270,15 +332,24 @@ export default function Inventory() {
                 <TableBody>
                   {sortedItems.map((item) => {
                     const isEditing = editingId === item.id;
+                    const isDeleting = deletingId === item.id;
 
                     if (isEditing) {
                       return (
                         <TableRow key={item.id}>
                           <TableCell>
-                            <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
+                            <Input
+                              value={editName}
+                              onChange={(e) => setEditName(e.target.value)}
+                              disabled={saving}
+                            />
                           </TableCell>
                           <TableCell>
-                            <Input value={editSku} onChange={(e) => setEditSku(e.target.value)} />
+                            <Input
+                              value={editSku}
+                              onChange={(e) => setEditSku(e.target.value)}
+                              disabled={saving}
+                            />
                           </TableCell>
                           <TableCell className="text-right">
                             <Input
@@ -286,9 +357,12 @@ export default function Inventory() {
                               min={0}
                               value={editQuantity}
                               onChange={(e) => setEditQuantity(e.target.value)}
+                              disabled={saving}
                             />
                           </TableCell>
-                          <TableCell className="text-muted-foreground">{item.id}</TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {item.id}
+                          </TableCell>
                           <TableCell className="text-right">
                             <div className="inline-flex items-center gap-2 justify-end">
                               <Button
@@ -299,7 +373,13 @@ export default function Inventory() {
                               >
                                 Save
                               </Button>
-                              <Button type="button" size="sm" variant="outline" onClick={cancelEdit} disabled={saving}>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={cancelEdit}
+                                disabled={saving}
+                              >
                                 Cancel
                               </Button>
                             </div>
@@ -313,17 +393,63 @@ export default function Inventory() {
                         <TableCell className="font-medium">
                           <div>{item.name}</div>
                         </TableCell>
-                        <TableCell className="text-muted-foreground">{item.sku || "—"}</TableCell>
-                        <TableCell className="text-right">{item?.stock?.total_quantity ?? 0}</TableCell>
-                        <TableCell className="text-muted-foreground">{item.id}</TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {item.sku || "—"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {item?.stock?.total_quantity ?? 0}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {item.id}
+                        </TableCell>
                         <TableCell className="text-right">
                           <div className="inline-flex items-center gap-2 justify-end">
-                            <Button type="button" size="sm" variant="outline" onClick={() => startEdit(item)} disabled={saving}>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => startEdit(item)}
+                              disabled={saving || isDeleting}
+                            >
                               Edit
                             </Button>
-                            <Button type="button" size="sm" variant="destructive" onClick={() => deleteItem(item.id)} disabled={saving}>
-                              Delete
-                            </Button>
+
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="destructive"
+                                  disabled={saving || isDeleting}
+                                >
+                                  {isDeleting ? "Deleting…" : "Delete"}
+                                </Button>
+                              </AlertDialogTrigger>
+
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>
+                                    Delete “{item.name}”?
+                                  </AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This cannot be undone. If this item is used in a
+                                    package, deletion may be blocked.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel disabled={isDeleting}>
+                                    Cancel
+                                  </AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => deleteItem(item.id)}
+                                    disabled={isDeleting}
+                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                  >
+                                    {isDeleting ? "Deleting…" : "Confirm delete"}
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
                           </div>
                         </TableCell>
                       </TableRow>

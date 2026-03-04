@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { createBooking, previewBookingAvailability } from "../api/bookings";
 import AvailabilityBreakdown from "../components/AvailabilityBreakdown";
+import { toast } from "sonner";
 
 import PageHeader from "../components/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -21,7 +22,7 @@ export default function BookingNew() {
   const [packages, setPackages] = useState([]);
   const [loadingPkgs, setLoadingPkgs] = useState(true);
 
-  // ✅ Addons
+  // Addons
   const [addons, setAddons] = useState([]);
   const [loadingAddons, setLoadingAddons] = useState(true);
   const [addonsErr, setAddonsErr] = useState("");
@@ -43,13 +44,18 @@ export default function BookingNew() {
         const res = await api.get("/packages");
         const list = res.data?.data ?? res.data;
         setPackages(Array.isArray(list) ? list : []);
+      } catch (e) {
+        const msg =
+          e?.response?.data?.message ?? e?.message ?? "Failed to load packages";
+        toast.error(msg);
+        setPackages([]);
       } finally {
         setLoadingPkgs(false);
       }
     })();
   }, []);
 
-  // ✅ Load addons for this org
+  // Load addons
   useEffect(() => {
     (async () => {
       setLoadingAddons(true);
@@ -59,8 +65,11 @@ export default function BookingNew() {
         const list = res.data?.data ?? res.data;
         setAddons(Array.isArray(list) ? list : []);
       } catch (e) {
-        setAddonsErr(e?.response?.data?.message ?? e?.message ?? "Failed to load addons");
+        const msg =
+          e?.response?.data?.message ?? e?.message ?? "Failed to load addons";
+        setAddonsErr(msg);
         setAddons([]);
+        toast.error(msg);
       } finally {
         setLoadingAddons(false);
       }
@@ -80,7 +89,6 @@ export default function BookingNew() {
         const res = await api.get(`/packages/${packageId}`);
         const pkg = res.data?.data ?? res.data;
 
-        // Try common shapes
         const rawItems =
           pkg?.items ??
           pkg?.package_items ??
@@ -100,13 +108,24 @@ export default function BookingNew() {
           .filter((x) => Number.isFinite(x.inventory_item_id) && x.quantity > 0);
 
         setItems(mapped);
+
+        if (mapped.length === 0) {
+          toast.message("Package has no items", {
+            description: "Add items to this package before creating a booking.",
+          });
+        }
       } catch (e) {
-        setErr(e?.response?.data?.message ?? e?.message ?? "Failed to load package items");
+        const msg =
+          e?.response?.data?.message ??
+          e?.message ??
+          "Failed to load package items";
+        setErr(msg);
+        toast.error(msg);
       }
     })();
   }, [packageId]);
 
-  // ✅ If addons change, invalidate preview (forces re-check)
+  // If addons change, invalidate preview (forces re-check)
   useEffect(() => {
     setPreview(null);
   }, [selectedAddons]);
@@ -116,7 +135,6 @@ export default function BookingNew() {
   }, [startLocal, endLocal, packageId, items.length]);
 
   function toISO(local) {
-    // datetime-local interpreted in local timezone → convert to UTC ISO
     const d = new Date(local);
     return d.toISOString();
   }
@@ -147,6 +165,8 @@ export default function BookingNew() {
   }
 
   async function onCheck() {
+    if (checking || creating) return;
+
     setErr("");
     setPreview(null);
 
@@ -156,11 +176,12 @@ export default function BookingNew() {
     }
 
     if (items.length === 0) {
-      setErr("This package has no items (or they failed to load). Add items to the package first.");
+      setErr(
+        "This package has no items (or they failed to load). Add items to the package first."
+      );
       return;
     }
 
-    // ✅ Frontend-side guard (backend also validates)
     const invalidAddon = selectedAddons.find(
       (a) => !a.addon_id || !Number.isFinite(a.quantity) || a.quantity < 1
     );
@@ -174,31 +195,43 @@ export default function BookingNew() {
       const payload = {
         start_at: toISO(startLocal),
         end_at: toISO(endLocal),
-
-        // You can keep this; backend may ignore it
         package_id: Number(packageId),
-
-        // ✅ Package requirements
         items,
-
-        // ✅ Addons for availability + booking creation
         addons: selectedAddons,
       };
 
       const res = await previewBookingAvailability(payload);
       setPreview(res);
+
+      if (res?.available) {
+        toast.success("Available", {
+          description: "No shortages detected for the selected dates.",
+        });
+      } else {
+        toast.message("Not available", {
+          description: "There are shortages. Review the breakdown below.",
+        });
+      }
     } catch (e) {
-      setErr(e?.response?.data?.message ?? e?.message ?? "Availability check failed");
+      const msg =
+        e?.response?.data?.message ?? e?.message ?? "Availability check failed";
+      setErr(msg);
+      toast.error(msg);
     } finally {
       setChecking(false);
     }
   }
 
   async function onCreate() {
+    if (creating || checking) return;
+
     setErr("");
 
     if (!preview?.available) {
       setErr("Booking is not available. Fix shortages or change dates.");
+      toast.error("Booking not available", {
+        description: "Run availability check and resolve shortages first.",
+      });
       return;
     }
 
@@ -219,10 +252,14 @@ export default function BookingNew() {
         created?.booking?.id ??
         created?.data?.booking?.id;
 
+      toast.success("Booking created");
+
       nav(newId ? `/bookings/${newId}` : "/bookings");
     } catch (e) {
-      const msg = e?.response?.data?.message ?? e?.message ?? "Create booking failed";
+      const msg =
+        e?.response?.data?.message ?? e?.message ?? "Create booking failed";
       setErr(msg);
+      toast.error(msg);
     } finally {
       setCreating(false);
     }
@@ -285,7 +322,10 @@ export default function BookingNew() {
                   ))}
               </select>
               <div className="text-xs text-muted-foreground">
-                Loaded package requirements: <span className="font-medium text-foreground">{items.length}</span>{" "}
+                Loaded package requirements:{" "}
+                <span className="font-medium text-foreground">
+                  {items.length}
+                </span>{" "}
                 item(s)
               </div>
             </div>
@@ -307,7 +347,9 @@ export default function BookingNew() {
           {loadingAddons ? (
             <div className="text-sm text-muted-foreground">Loading addons…</div>
           ) : addons.length === 0 ? (
-            <div className="text-sm text-muted-foreground">No addons available.</div>
+            <div className="text-sm text-muted-foreground">
+              No addons available.
+            </div>
           ) : (
             <div className="space-y-2">
               {addons.map((a) => {
@@ -334,7 +376,9 @@ export default function BookingNew() {
                           </span>
                         </div>
                         {a.description ? (
-                          <div className="text-sm text-muted-foreground">{a.description}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {a.description}
+                          </div>
                         ) : null}
                       </div>
                     </label>
@@ -358,7 +402,9 @@ export default function BookingNew() {
 
           <div className="text-xs text-muted-foreground">
             Selected addons:{" "}
-            <span className="font-medium text-foreground">{selectedAddons.length}</span>
+            <span className="font-medium text-foreground">
+              {selectedAddons.length}
+            </span>
           </div>
         </CardContent>
       </Card>
@@ -370,13 +416,17 @@ export default function BookingNew() {
       ) : null}
 
       <div className="flex flex-wrap gap-2">
-        <Button onClick={onCheck} disabled={!canCheck || checking} variant="outline">
+        <Button
+          onClick={onCheck}
+          disabled={!canCheck || checking || creating}
+          variant="outline"
+        >
           {checking ? "Checking…" : "Check availability"}
         </Button>
 
         <Button
           onClick={onCreate}
-          disabled={!preview?.available || creating}
+          disabled={!preview?.available || creating || checking}
           title={!preview ? "Run check first" : ""}
         >
           {creating ? "Creating…" : "Confirm booking"}

@@ -2,12 +2,32 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { cancelBooking, getBooking, getPackingList } from "../api/bookings";
+import { toast } from "sonner";
 
 import PageHeader from "../components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 export default function BookingDetail() {
   const { id } = useParams();
@@ -17,17 +37,22 @@ export default function BookingDetail() {
   const [err, setErr] = useState("");
   const [booking, setBooking] = useState(null);
 
+  const [cancelling, setCancelling] = useState(false);
+
   const [packingLoading, setPackingLoading] = useState(false);
   const [packing, setPacking] = useState(null);
 
-  async function load() {
-    setErr("");
+  async function load({ silent = false } = {}) {
+    if (!silent) setErr("");
     setLoading(true);
     try {
       const data = await getBooking(bookingId);
       setBooking(data);
     } catch (e) {
-      setErr(e?.response?.data?.message ?? e?.message ?? "Failed to load booking");
+      const msg =
+        e?.response?.data?.message ?? e?.message ?? "Failed to load booking";
+      setErr(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -40,22 +65,33 @@ export default function BookingDetail() {
   }, [bookingId]);
 
   async function onCancel() {
-    if (!confirm("Cancel this booking?")) return;
+    if (cancelling) return;
+    setCancelling(true);
     try {
       await cancelBooking(bookingId);
-      await load();
+      toast.success(`Booking #${bookingId} cancelled`);
+      await load({ silent: true });
     } catch (e) {
-      alert(e?.response?.data?.message ?? e?.message ?? "Cancel failed");
+      const msg = e?.response?.data?.message ?? e?.message ?? "Cancel failed";
+      toast.error(msg);
+    } finally {
+      setCancelling(false);
     }
   }
 
   async function onLoadPacking() {
+    if (packingLoading) return;
     setPackingLoading(true);
     try {
       const data = await getPackingList(bookingId);
       setPacking(data);
+      toast.success("Packing list loaded");
     } catch (e) {
-      alert(e?.response?.data?.message ?? e?.message ?? "Failed to load packing list");
+      const msg =
+        e?.response?.data?.message ??
+        e?.message ??
+        "Failed to load packing list";
+      toast.error(msg);
     } finally {
       setPackingLoading(false);
     }
@@ -121,9 +157,38 @@ export default function BookingDetail() {
 
             <div className="pt-2">
               {cancellable ? (
-                <Button variant="destructive" onClick={onCancel}>
-                  Cancel booking
-                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" disabled={cancelling}>
+                      {cancelling ? "Cancelling…" : "Cancel booking"}
+                    </Button>
+                  </AlertDialogTrigger>
+
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>
+                        Cancel booking #{booking?.id ?? bookingId}?
+                      </AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will release all reserved inventory for this booking.
+                        This action cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+
+                    <AlertDialogFooter>
+                      <AlertDialogCancel disabled={cancelling}>
+                        Keep booking
+                      </AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={onCancel}
+                        disabled={cancelling}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        {cancelling ? "Cancelling…" : "Confirm cancel"}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               ) : (
                 <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
                   {rawStatus === "cancelled"
@@ -142,7 +207,11 @@ export default function BookingDetail() {
             <CardTitle>Packing list</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Button onClick={onLoadPacking} disabled={packingLoading} className="w-full">
+            <Button
+              onClick={onLoadPacking}
+              disabled={packingLoading}
+              className="w-full"
+            >
               {packingLoading ? "Loading…" : "Load packing list"}
             </Button>
 
@@ -163,8 +232,9 @@ export default function BookingDetail() {
 
                 <div className="text-xs text-muted-foreground">
                   <span className="font-medium text-foreground">Summary:</span>{" "}
-                  {packing.summary?.unique_items ?? (packing.packing_list || []).length} unique items ·{" "}
-                  {packing.summary?.total_units ?? "—"} total units
+                  {packing.summary?.unique_items ??
+                    (packing.packing_list || []).length}{" "}
+                  unique items · {packing.summary?.total_units ?? "—"} total units
                 </div>
               </div>
             ) : (
@@ -189,10 +259,18 @@ export default function BookingDetail() {
 }
 
 function ReservedItems({ booking }) {
-  const reservations = booking?.reservations ?? booking?.inventory_reservations ?? booking?.items ?? [];
+  const reservations =
+    booking?.reservations ??
+    booking?.inventory_reservations ??
+    booking?.items ??
+    [];
 
   if (!Array.isArray(reservations) || reservations.length === 0) {
-    return <div className="text-sm text-muted-foreground">No reservation breakdown returned.</div>;
+    return (
+      <div className="text-sm text-muted-foreground">
+        No reservation breakdown returned.
+      </div>
+    );
   }
 
   return (
@@ -247,12 +325,6 @@ function fmt(iso) {
   });
 }
 
-/**
- * Frontend-only derived status:
- * - cancelled stays cancelled
- * - if end_at is in the past => completed
- * - else use backend status
- */
 function getDisplayStatus(b) {
   const raw = String(b?.status ?? "");
   if (raw.toLowerCase() === "cancelled") return "Cancelled";
@@ -278,6 +350,6 @@ function isStarted(b) {
 function isCancellable(b) {
   const raw = String(b?.status ?? "").toLowerCase();
   if (raw === "cancelled") return false;
-  if (isStarted(b)) return false; // matches your backend rule
+  if (isStarted(b)) return false;
   return true;
 }
