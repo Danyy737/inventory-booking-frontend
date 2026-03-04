@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
 
+import PageHeader from "../components/PageHeader";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+
 export default function Inventory() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -12,6 +19,9 @@ export default function Inventory() {
   const [sku, setSku] = useState("");
   const [quantity, setQuantity] = useState(0);
 
+  // Search
+  const [q, setQ] = useState("");
+
   // Inline edit
   const [editingId, setEditingId] = useState(null);
   const [editName, setEditName] = useState("");
@@ -19,8 +29,16 @@ export default function Inventory() {
   const [editQuantity, setEditQuantity] = useState(0);
 
   const sortedItems = useMemo(() => {
-    return [...items].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-  }, [items]);
+    const base = [...items].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    const query = q.trim().toLowerCase();
+    if (!query) return base;
+    return base.filter((it) => {
+      const n = String(it.name || "").toLowerCase();
+      const s = String(it.sku || "").toLowerCase();
+      const id = String(it.id || "");
+      return n.includes(query) || s.includes(query) || id.includes(query);
+    });
+  }, [items, q]);
 
   async function fetchItems() {
     setErr("");
@@ -134,133 +152,189 @@ export default function Inventory() {
       await api.delete(`/inventory/items/${id}`);
       setItems((prev) => prev.filter((it) => it.id !== id));
     } catch (e) {
-      setErr(
-        e?.response?.data?.message ||
-          "Failed to delete item. It may be referenced by a package."
-      );
+      setErr(e?.response?.data?.message || "Failed to delete item. It may be referenced by a package.");
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <div style={{ padding: 20, maxWidth: 900 }}>
-      <h2>Inventory</h2>
-      <p style={{ marginTop: 6 }}>Create, edit, and manage your inventory items.</p>
-
-      {err && <div style={{ color: "crimson", marginTop: 10 }}>{err}</div>}
-
-      {/* Create */}
-      <form
-        onSubmit={createItem}
-        style={{ border: "1px solid #ddd", padding: 16, marginTop: 16 }}
-      >
-        <h3 style={{ marginTop: 0 }}>Add item</h3>
-        <div style={{ display: "grid", gap: 10 }}>
-          <input
-            placeholder="Name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-          />
-          <input
-            placeholder="SKU (optional)"
-            value={sku}
-            onChange={(e) => setSku(e.target.value)}
-          />
-          <input
-            placeholder="Quantity"
-            type="number"
-            value={quantity}
-            onChange={(e) => setQuantity(e.target.value)}
-            min={0}
-            required
-          />
-          <button disabled={saving || !name.trim()}>
-            {saving ? "Working..." : "Create item"}
-          </button>
-        </div>
-      </form>
-
-      {/* List */}
-      <div style={{ marginTop: 18 }}>
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <h3 style={{ margin: 0 }}>Items</h3>
-          <button type="button" onClick={fetchItems} disabled={loading || saving}>
-            Refresh
-          </button>
-        </div>
-
-        {loading ? (
-          <div style={{ marginTop: 10 }}>Loading…</div>
-        ) : sortedItems.length === 0 ? (
-          <div style={{ marginTop: 10 }}>No items yet.</div>
-        ) : (
-          <div style={{ marginTop: 10, border: "1px solid #ddd" }}>
-            {sortedItems.map((item) => {
-              const isEditing = editingId === item.id;
-
-              return (
-                <div
-                  key={item.id}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "2fr 1fr 1fr auto",
-                    gap: 10,
-                    padding: 12,
-                    borderTop: "1px solid #eee",
-                    alignItems: "center",
-                  }}
-                >
-                  {isEditing ? (
-                    <>
-                      <input value={editName} onChange={(e) => setEditName(e.target.value)} />
-                      <input value={editSku} onChange={(e) => setEditSku(e.target.value)} />
-                      <input
-                        type="number"
-                        min={0}
-                        value={editQuantity}
-                        onChange={(e) => setEditQuantity(e.target.value)}
-                      />
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <button
-                          type="button"
-                          onClick={() => saveEdit(item.id)}
-                          disabled={saving || !editName.trim()}
-                        >
-                          Save
-                        </button>
-                        <button type="button" onClick={cancelEdit} disabled={saving}>
-                          Cancel
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div>
-                        <div style={{ fontWeight: 600 }}>{item.name}</div>
-                        <div style={{ fontSize: 12, color: "#666" }}>
-                          SKU: {item.sku || "—"}
-                        </div>
-                      </div>
-                      <div>Qty: {item?.stock?.total_quantity ?? 0}</div>
-                      <div style={{ fontSize: 12, color: "#666" }}>ID: {item.id}</div>
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <button type="button" onClick={() => startEdit(item)} disabled={saving}>
-                          Edit
-                        </button>
-                        <button type="button" onClick={() => deleteItem(item.id)} disabled={saving}>
-                          Delete
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              );
-            })}
+    <div className="space-y-6">
+      <PageHeader
+        title="Inventory"
+        description="Create, edit, and manage your inventory items."
+        right={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={fetchItems} disabled={loading || saving}>
+              Refresh
+            </Button>
           </div>
-        )}
-      </div>
+        }
+      />
+
+      {err ? (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+          {err}
+        </div>
+      ) : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Add item</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={createItem} className="grid gap-4 md:grid-cols-3">
+            <div className="space-y-2 md:col-span-1">
+              <Label>Name</Label>
+              <Input
+                placeholder="e.g. Folding chair"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="space-y-2 md:col-span-1">
+              <Label>SKU (optional)</Label>
+              <Input
+                placeholder="e.g. CHAIR-001"
+                value={sku}
+                onChange={(e) => setSku(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2 md:col-span-1">
+              <Label>Quantity</Label>
+              <Input
+                type="number"
+                min={0}
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="md:col-span-3 flex flex-wrap gap-2">
+              <Button type="submit" disabled={saving || !name.trim()}>
+                {saving ? "Working..." : "Create item"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setName("");
+                  setSku("");
+                  setQuantity(0);
+                }}
+                disabled={saving}
+              >
+                Clear
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-4">
+          <CardTitle>Items</CardTitle>
+          <div className="w-full max-w-xs">
+            <Input
+              placeholder="Search name, sku, id…"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
+          </div>
+        </CardHeader>
+
+        <CardContent>
+          {loading ? (
+            <div className="text-sm text-muted-foreground">Loading…</div>
+          ) : sortedItems.length === 0 ? (
+            <div className="text-sm text-muted-foreground">
+              {items.length === 0 ? "No items yet." : "No results for your search."}
+            </div>
+          ) : (
+            <div className="rounded-md border overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>SKU</TableHead>
+                    <TableHead className="text-right w-[120px]">Qty</TableHead>
+                    <TableHead className="w-[100px]">ID</TableHead>
+                    <TableHead className="text-right w-[220px]">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+
+                <TableBody>
+                  {sortedItems.map((item) => {
+                    const isEditing = editingId === item.id;
+
+                    if (isEditing) {
+                      return (
+                        <TableRow key={item.id}>
+                          <TableCell>
+                            <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
+                          </TableCell>
+                          <TableCell>
+                            <Input value={editSku} onChange={(e) => setEditSku(e.target.value)} />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Input
+                              type="number"
+                              min={0}
+                              value={editQuantity}
+                              onChange={(e) => setEditQuantity(e.target.value)}
+                            />
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">{item.id}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="inline-flex items-center gap-2 justify-end">
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => saveEdit(item.id)}
+                                disabled={saving || !editName.trim()}
+                              >
+                                Save
+                              </Button>
+                              <Button type="button" size="sm" variant="outline" onClick={cancelEdit} disabled={saving}>
+                                Cancel
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    }
+
+                    return (
+                      <TableRow key={item.id}>
+                        <TableCell className="font-medium">
+                          <div>{item.name}</div>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">{item.sku || "—"}</TableCell>
+                        <TableCell className="text-right">{item?.stock?.total_quantity ?? 0}</TableCell>
+                        <TableCell className="text-muted-foreground">{item.id}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="inline-flex items-center gap-2 justify-end">
+                            <Button type="button" size="sm" variant="outline" onClick={() => startEdit(item)} disabled={saving}>
+                              Edit
+                            </Button>
+                            <Button type="button" size="sm" variant="destructive" onClick={() => deleteItem(item.id)} disabled={saving}>
+                              Delete
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
