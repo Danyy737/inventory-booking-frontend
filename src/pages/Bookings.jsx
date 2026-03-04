@@ -7,12 +7,37 @@ import PageHeader from "../components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Separator } from "@/components/ui/separator";
+
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+
+const FILTERS = [
+  { key: "upcoming", label: "Upcoming" },
+  { key: "completed", label: "Completed" },
+  { key: "cancelled", label: "Cancelled" },
+  { key: "all", label: "All" },
+];
 
 export default function Bookings() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [busyCancelId, setBusyCancelId] = useState(null);
   const [err, setErr] = useState("");
+
+  const [filter, setFilter] = useState("upcoming");
+  const [q, setQ] = useState(""); // id search
 
   async function load() {
     setErr("");
@@ -21,13 +46,11 @@ export default function Bookings() {
       const data = await listBookings();
       const list = Array.isArray(data) ? data : [];
 
-      // Optional: sort upcoming first, then past, then cancelled
       const sorted = [...list].sort((a, b) => {
         const aKey = sortKey(a);
         const bKey = sortKey(b);
         if (aKey !== bKey) return aKey - bKey;
 
-        // Within group: soonest first for upcoming, most recent first for past
         const aStart = new Date(a.start_at).getTime() || 0;
         const bStart = new Date(b.start_at).getTime() || 0;
         return aKey === 0 ? aStart - bStart : bStart - aStart;
@@ -46,12 +69,15 @@ export default function Bookings() {
   }, []);
 
   async function onCancel(id) {
-    if (!confirm("Cancel this booking?")) return;
+
+    setBusyCancelId(id);
     try {
       await cancelBooking(id);
       await load();
     } catch (e) {
       alert(e?.response?.data?.message ?? e?.message ?? "Cancel failed");
+    } finally {
+      setBusyCancelId(null);
     }
   }
 
@@ -70,6 +96,25 @@ export default function Bookings() {
     return { upcoming, completed, cancelled, total: rows.length };
   }, [rows]);
 
+  const filteredRows = useMemo(() => {
+    let out = rows;
+
+    // filter bucket
+    if (filter === "upcoming") {
+      out = out.filter((b) => String(b?.status ?? "").toLowerCase() !== "cancelled" && !isCompleted(b));
+    } else if (filter === "completed") {
+      out = out.filter((b) => String(b?.status ?? "").toLowerCase() !== "cancelled" && isCompleted(b));
+    } else if (filter === "cancelled") {
+      out = out.filter((b) => String(b?.status ?? "").toLowerCase() === "cancelled");
+    }
+
+    // id search
+    const query = q.trim();
+    if (query) out = out.filter((b) => String(b.id).includes(query));
+
+    return out;
+  }, [rows, filter, q]);
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -87,11 +132,12 @@ export default function Bookings() {
         }
       />
 
-      <div className="flex flex-wrap gap-2">
-        <Badge variant="secondary">Total: {counts.total}</Badge>
-        <Badge variant="secondary">Upcoming: {counts.upcoming}</Badge>
-        <Badge variant="secondary">Completed: {counts.completed}</Badge>
-        <Badge variant="secondary">Cancelled: {counts.cancelled}</Badge>
+      {/* Insight cards */}
+      <div className="grid gap-3 md:grid-cols-4">
+        <StatCard label="Total" value={counts.total} />
+        <StatCard label="Upcoming" value={counts.upcoming} />
+        <StatCard label="Completed" value={counts.completed} />
+        <StatCard label="Cancelled" value={counts.cancelled} />
       </div>
 
       {err ? (
@@ -101,35 +147,77 @@ export default function Bookings() {
       ) : null}
 
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">All bookings</CardTitle>
+        <CardHeader className="space-y-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <CardTitle className="text-base">Manage bookings</CardTitle>
+
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <Input
+                className="sm:w-56"
+                placeholder="Search by booking ID…"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* Filter tabs */}
+          <div className="flex flex-wrap gap-2">
+            {FILTERS.map((f) => (
+              <Button
+                key={f.key}
+                type="button"
+                variant={filter === f.key ? "default" : "outline"}
+                size="sm"
+                onClick={() => setFilter(f.key)}
+              >
+                {f.label}
+              </Button>
+            ))}
+          </div>
+
+          <Separator />
         </CardHeader>
 
         <CardContent>
           {loading ? (
             <div className="text-sm text-muted-foreground">Loading…</div>
-          ) : rows.length === 0 ? (
-            <div className="text-sm text-muted-foreground flex items-center justify-between gap-4">
-              <div>No bookings yet.</div>
-              <Button asChild>
-                <Link to="/bookings/new">Create your first booking</Link>
-              </Button>
-            </div>
+          ) : filteredRows.length === 0 ? (
+            <EmptyState
+              title={rows.length === 0 ? "No bookings yet" : "No results"}
+              subtitle={
+                rows.length === 0
+                  ? "Create your first booking to start reserving inventory."
+                  : "Try another filter or clear the search."
+              }
+              primary={
+                <Button asChild>
+                  <Link to="/bookings/new">Create booking</Link>
+                </Button>
+              }
+              secondary={
+                rows.length === 0 ? null : (
+                  <Button variant="outline" onClick={() => setQ("")}>
+                    Clear search
+                  </Button>
+                )
+              }
+            />
           ) : (
             <div className="rounded-md border overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[80px]">ID</TableHead>
+                    <TableHead className="w-[90px]">ID</TableHead>
                     <TableHead>Start</TableHead>
                     <TableHead>End</TableHead>
                     <TableHead className="w-[140px]">Status</TableHead>
-                    <TableHead className="w-[220px] text-right">Actions</TableHead>
+                    <TableHead className="w-[240px] text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
 
                 <TableBody>
-                  {rows.map((b) => {
+                  {filteredRows.map((b) => {
                     const statusLabel = getDisplayStatus(b);
                     const cancellable = isCancellable(b);
                     const meta =
@@ -141,9 +229,11 @@ export default function Bookings() {
                         ? "Started"
                         : "Upcoming";
 
+                    const cancelling = busyCancelId === b.id;
+
                     return (
-                      <TableRow key={b.id}>
-                        <TableCell className="font-medium">{b.id}</TableCell>
+                      <TableRow key={b.id} className="hover:bg-muted/40">
+                        <TableCell className="font-medium">#{b.id}</TableCell>
                         <TableCell>{fmt(b.start_at)}</TableCell>
                         <TableCell>{fmt(b.end_at)}</TableCell>
                         <TableCell>
@@ -156,14 +246,34 @@ export default function Bookings() {
                             </Button>
 
                             {cancellable ? (
-                              <Button
-                                variant="destructive"
-                                size="sm"
-                                onClick={() => onCancel(b.id)}
-                              >
-                                Cancel
-                              </Button>
-                            ) : (
+  <AlertDialog>
+    <AlertDialogTrigger asChild>
+      <Button variant="destructive" size="sm">
+        Cancel
+      </Button>
+    </AlertDialogTrigger>
+
+    <AlertDialogContent>
+      <AlertDialogHeader>
+        <AlertDialogTitle>Cancel booking #{b.id}?</AlertDialogTitle>
+        <AlertDialogDescription>
+          This will release all reserved inventory for this booking.
+          This action cannot be undone.
+        </AlertDialogDescription>
+      </AlertDialogHeader>
+
+      <AlertDialogFooter>
+        <AlertDialogCancel>Keep booking</AlertDialogCancel>
+        <AlertDialogAction
+          onClick={() => onCancel(b.id)}
+          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+        >
+          Confirm cancel
+        </AlertDialogAction>
+      </AlertDialogFooter>
+    </AlertDialogContent>
+  </AlertDialog>
+) : (
                               <span className="text-xs text-muted-foreground">{meta}</span>
                             )}
                           </div>
@@ -177,6 +287,32 @@ export default function Bookings() {
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function StatCard({ label, value }) {
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="text-xs text-muted-foreground">{label}</div>
+        <div className="mt-1 text-2xl font-semibold">{value}</div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function EmptyState({ title, subtitle, primary, secondary }) {
+  return (
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <div className="font-medium">{title}</div>
+        <div className="text-sm text-muted-foreground">{subtitle}</div>
+      </div>
+      <div className="flex gap-2">
+        {secondary}
+        {primary}
+      </div>
     </div>
   );
 }
@@ -203,12 +339,6 @@ function fmt(iso) {
   });
 }
 
-/**
- * Frontend-only derived status:
- * - cancelled stays cancelled
- * - if end_at is in the past => completed
- * - else use backend status (likely confirmed)
- */
 function getDisplayStatus(b) {
   const raw = String(b?.status ?? "");
   if (raw.toLowerCase() === "cancelled") return "Cancelled";
@@ -231,12 +361,6 @@ function isStarted(b) {
   return start.getTime() <= Date.now();
 }
 
-/**
- * Your backend blocks cancelling past/started bookings.
- * We match that rule:
- * - must not be cancelled
- * - must not be started
- */
 function isCancellable(b) {
   const raw = String(b?.status ?? "").toLowerCase();
   if (raw === "cancelled") return false;
@@ -244,12 +368,6 @@ function isCancellable(b) {
   return true;
 }
 
-/**
- * Sorting:
- * 0 = upcoming & active
- * 1 = past & active
- * 2 = cancelled
- */
 function sortKey(b) {
   const raw = String(b?.status ?? "").toLowerCase();
   if (raw === "cancelled") return 2;
