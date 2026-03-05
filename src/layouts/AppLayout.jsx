@@ -90,9 +90,7 @@ export default function AppLayout() {
           {/* Top Bar */}
           <header className="h-14 border-b bg-card flex items-center justify-between px-6">
             <div className="text-sm text-muted-foreground">
-              {user?.current_organisation?.name
-                ? `Organisation: ${user.current_organisation.name}`
-                : "No organisation selected"}
+              {user?.current_organisation?.name && `Organisation: ${user.current_organisation.name}`}
             </div>
 
             <div className="text-sm font-medium">{user?.email ?? "User"}</div>
