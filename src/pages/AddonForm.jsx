@@ -148,7 +148,18 @@ export default function AddonForm({ mode }) {
 
       navigate("/addons");
     } catch (e) {
-      setErr(e?.response?.data?.message ?? "Save failed. Check required fields and try again.");
+      const status = e?.response?.status;
+      const data = e?.response?.data;
+
+      if (status === 403) {
+        setErr("Admin only: you don’t have permission to create or edit addons.");
+      } else if (status === 422) {
+        const msg = data?.message || "Validation failed. Check required fields and try again.";
+        const firstFieldError = data?.errors ? Object.values(data.errors).flat()?.[0] : null;
+        setErr(firstFieldError ? `${msg} (${firstFieldError})` : msg);
+      } else {
+        setErr(data?.message ?? e?.message ?? "Save failed.");
+      }
     } finally {
       setSaving(false);
     }
@@ -209,7 +220,7 @@ export default function AddonForm({ mode }) {
                 className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               >
                 <option value="per_unit">per_unit</option>
-                <option value="flat_fee">flat_fee</option>
+                <option value="fixed">fixed</option>
               </select>
             </div>
 
