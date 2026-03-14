@@ -1,28 +1,91 @@
-# Inventory Booking SaaS – Frontend
+# Grabite – Frontend
 
-Frontend application for the Inventory Booking SaaS platform.
+Frontend application for **Grabite**, a multi-tenant inventory and booking SaaS that prevents businesses from double-booking inventory across overlapping bookings.
 
-This React application connects to the Laravel backend API and provides the user interface for managing inventory, packages, bookings, and availability checks.
+This React application provides the user interface for managing organisations, inventory, packages, addons, and bookings.
 
-Backend Repository:
+---
+
+## Live Application
+
+https://grabite.co/
+
+Backend Repository  
 https://github.com/Danyy737/inventory-booking-saas
+
+Frontend Repository  
+https://github.com/Danyy737/inventory-booking-frontend
 
 ---
 
 ## Overview
 
-This frontend provides:
+Grabite is designed for businesses that need to manage physical inventory across bookings or reservations.
 
-- Authentication (login / register)
-- Organisation selection
-- Inventory management UI
-- Package management UI
-- Addons management UI (inventory-backed upsells)
-- Booking creation and management (packages + addons)
-- Availability preview and validation (prevents oversells)
-- Packing list viewing (package + addon totals)
+Examples include:
 
-The application communicates with the backend API using Axios and is protected using Sanctum authentication tokens.
+- Event hire companies
+- Equipment rental services
+- Party hire businesses
+- Production or AV equipment rental
+- Service businesses with limited stock
+
+The platform ensures inventory cannot be reserved more than once for the same time window.
+
+The frontend handles the full user workflow including onboarding, inventory management, booking creation, and availability validation.
+
+---
+
+## Core Features
+
+### Authentication
+- User registration
+- Login and logout
+- Protected routes
+- Auth state management
+
+### Organisation Onboarding
+- Create an organisation
+- Join an organisation via invite code
+- Tenant-aware user interface
+
+### Inventory Management
+- Create inventory items
+- Edit stock quantities
+- Remove inventory items
+
+### Package Management
+- Build reusable bundles of inventory items
+- Select packages during booking creation
+
+### Addons
+- Create optional extras backed by inventory
+- Support quantity-based addon selection
+
+### Booking Management
+- Create bookings with start and end times
+- View booking details
+- Cancel bookings
+- View packing lists
+
+### Availability Checking
+- Preview inventory availability before confirming a booking
+- Display required vs available inventory
+- Prevent invalid booking confirmation when stock is insufficient
+
+---
+
+## Booking Workflow
+
+1. User selects booking start and end time
+2. User selects a package
+3. User optionally adds addons
+4. The system checks inventory availability
+5. Required vs available stock is displayed
+6. If stock is available the booking can be confirmed
+7. The user is redirected to the booking detail page
+
+Addon quantities are included in the final inventory calculation.
 
 ---
 
@@ -31,126 +94,92 @@ The application communicates with the backend API using Axios and is protected u
 - React
 - React Router
 - Axios
-- Context API (Auth Context)
-- Vite (or your current build tool)
-
----
-
-## How It Connects to the Backend
-
-The frontend communicates with the Laravel backend via an Axios API client.
-
-The base URL is configured in:
-
-```
-src/api/client.js
-```
-
-Make sure your backend is running before starting the frontend.
-
----
-
-## Installation
-
-Clone the repository:
-
-```
-git clone <your-frontend-repo-url>
-cd inventory-booking-frontend
-```
-
-Install dependencies:
-
-```
-npm install
-```
-
-Run the development server:
-
-```
-npm run dev
-```
-
-Ensure the backend server is running at the configured base URL.
-
----
-
-## Core Pages
-
-- Dashboard
-- Inventory
-- Packages
-- Bookings
-- Availability
-- Addons
-- Booking Detail (Packing List)
-
----
-
-## Addons + Bookings Integration
-
-Addons are optional extras that can be added to a booking (e.g. “Extra Chairs”, “Extra Table”).
-Each addon is backed by inventory items and consumes stock during the booking window.
-
-### Booking flow
-1. Select **Start** and **End**
-2. Select a **Package**
-3. Select **Addons** and set quantity for each addon
-4. Click **Check availability**
-   - Shows required vs available inventory (includes addon consumption)
-5. Click **Confirm booking**
-   - Creates booking + reservations, then redirects to booking detail
-
-### How addon quantity works
-If an addon contains inventory items with `quantity_per_unit`:
-- Selecting `Extra Chairs x 2` where `quantity_per_unit = 5` reserves **10 chairs**.
-
-> Note: inactive addons are hidden from the booking addon selector and the default addons list.
+- Context API
+- Vite
+- Tailwind CSS
+- Component-based UI architecture
 
 ---
 
 ## Project Structure
 
-```
 src/
- ├── api/
- │    └── client.js
- ├── auth/
- │    └── AuthContext.jsx
- ├── pages/
- │    ├── Availability.jsx
- │    ├── Bookings.jsx
- │    ├── BookingDetail.jsx
- │    ├── Inventory.jsx
- │    ├── Packages.jsx
- │    └── Dashboard.jsx
- └── App.jsx
-```
+
+api/  
+client.js – Axios API client
+
+auth/  
+AuthContext.jsx – authentication state management
+
+pages/  
+Dashboard.jsx  
+Inventory.jsx  
+Packages.jsx  
+Addons.jsx  
+Bookings.jsx  
+Availability.jsx  
+BookingDetail.jsx  
+Login.jsx  
+Register.jsx  
+Onboarding.jsx  
+
+App.jsx – application routing
 
 ---
 
-## Status
+## API Integration
 
-MVP Complete.
+The frontend communicates with the Laravel backend using an Axios API client.
 
-This frontend integrates with the backend to provide:
+Base configuration can be found in:
 
-- Multi-tenant organisation support
-- Real-time availability validation (packages + addons)
-- Reservation-based conflict prevention
-- Package expansion logic
-- Addon selection with quantity multiplier support
-- Packing list generation (includes addons)
+src/api/client.js
+
+Make sure the backend API URL is configured correctly in your environment variables.
+
+Example:
+
+VITE_API_URL=http://localhost:8000/api
 
 ---
 
-## Future Improvements
+## Local Development
 
-- Booking lifecycle states
-- Calendar view
-- Dashboard reporting
-- UI design improvements
-- Production deployment configuration
+Clone the repository
+
+git clone https://github.com/Danyy737/inventory-booking-frontend.git
+
+cd inventory-booking-frontend
+
+Install dependencies
+
+npm install
+
+Create environment file
+
+VITE_API_URL=http://localhost:8000/api
+
+Start development server
+
+npm run dev
+
+Open the app
+
+http://localhost:5173
+
+---
+
+## What This Project Demonstrates
+
+This project demonstrates:
+
+- building a full SaaS frontend with React
+- authenticated route handling
+- API integration with Laravel backend
+- multi-tenant user flows
+- inventory-aware booking workflows
+- modern frontend development with Vite
+- cloud deployment
 
 ---
 
@@ -158,4 +187,4 @@ This frontend integrates with the backend to provide:
 
 Daniel Mourad
 
-Frontend client for the Inventory Booking SaaS platform.
+Full Stack Developer
